@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tuist
+        uses: jdx/mise-action@v2
+
+      - name: Generate project
+        run: tuist generate --no-open
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -workspace WorldClock.xcworkspace \
+            -scheme WorldClock \
+            -destination "platform=macOS" \
+            -quiet
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -workspace WorldClock.xcworkspace \
+            -scheme WorldClock \
+            -destination "platform=macOS" \
+            -quiet

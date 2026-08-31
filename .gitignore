@@ -9,3 +9,9 @@ xcuserdata/
 
 # Scratch (local working files)
 .scratch/
+
+# Tuist (project files are generated — never commit)
+*.xcodeproj
+*.xcworkspace
+Derived/
+.tuist-cache/
