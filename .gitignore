@@ -1,0 +1,11 @@
+.DS_Store
+*.profraw
+
+# Xcode / Swift
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Scratch (local working files)
+.scratch/
