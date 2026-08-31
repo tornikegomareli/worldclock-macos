@@ -52,6 +52,25 @@ final class LocationsStore {
         locations.move(fromOffsets: source, toOffset: destination)
     }
 
+    /// Fills in coordinates for Locations that lack them (e.g. Home seeded
+    /// from just a timezone), using a resolver such as a City database lookup.
+    func backfillCoordinates(_ resolve: (Location) -> (latitude: Double, longitude: Double)?) {
+        let filled = locations.map { location -> Location in
+            guard location.latitude == nil || location.longitude == nil,
+                  let coordinate = resolve(location)
+            else { return location }
+            return Location(
+                cityName: location.cityName,
+                timeZone: location.timeZone,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+        }
+        if filled != locations {
+            locations = filled
+        }
+    }
+
     private func save() {
         do {
             try FileManager.default.createDirectory(
@@ -71,9 +90,18 @@ final class LocationsStore {
             timeZone: homeTimeZone
         )
         let others: [Location] = [
-            Location(cityName: "London", timeZone: TimeZone(identifier: "Europe/London")!),
-            Location(cityName: "New York", timeZone: TimeZone(identifier: "America/New_York")!),
-            Location(cityName: "Tokyo", timeZone: TimeZone(identifier: "Asia/Tokyo")!),
+            Location(
+                cityName: "London", timeZone: TimeZone(identifier: "Europe/London")!,
+                latitude: 51.5074, longitude: -0.1278
+            ),
+            Location(
+                cityName: "New York", timeZone: TimeZone(identifier: "America/New_York")!,
+                latitude: 40.7128, longitude: -74.006
+            ),
+            Location(
+                cityName: "Tokyo", timeZone: TimeZone(identifier: "Asia/Tokyo")!,
+                latitude: 35.6895, longitude: 139.6917
+            ),
         ]
         return [home] + others.filter { $0.id != home.id }
     }

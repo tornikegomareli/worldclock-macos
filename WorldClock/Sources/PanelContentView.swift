@@ -45,19 +45,22 @@ struct PanelContentView: View {
         let homeZone = store.home?.timeZone ?? location.timeZone
         let offset = RelativeOffset(of: location.timeZone, home: homeZone, at: instant)
 
-        return HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(location.cityName)
-                    .font(.body)
-                Text(isHome ? "Home" : TimeFormatting.relativeOffset(seconds: offset.seconds))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        return VStack(spacing: 4) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(location.cityName)
+                        .font(.body)
+                    Text(isHome ? "Home" : TimeFormatting.relativeOffset(seconds: offset.seconds))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
+                    .font(.title3.monospacedDigit())
             }
-            Spacer()
-            Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
-                .font(.title3.monospacedDigit())
+            DayLineView(dayLine: DayLineModel.dayLine(for: location, at: instant))
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     private var addLocationFooter: some View {
@@ -147,7 +150,14 @@ struct PanelContentView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             withAnimation(.spring(duration: 0.35)) {
-                store.add(Location(cityName: city.name, timeZone: zone))
+                store.add(
+                    Location(
+                        cityName: city.name,
+                        timeZone: zone,
+                        latitude: city.latitude,
+                        longitude: city.longitude
+                    )
+                )
             }
         }
     }

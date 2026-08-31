@@ -62,7 +62,16 @@ final class PanelController: NSObject, NSWindowDelegate {
             self?.state.isSearching = true
         }
         engine.startTicking()
-        databaseLoader.load()
+        databaseLoader.load { [weak self] database in
+            guard let self else { return }
+            // Give timezone-only Locations (like the seeded Home) real
+            // coordinates so their Day Lines stop degrading to the equator.
+            store.backfillCoordinates { location in
+                database.search(location.cityName, at: engine.globalInstant)
+                    .first { $0.timeZone == location.timeZone.identifier }
+                    .map { (latitude: $0.latitude, longitude: $0.longitude) }
+            }
+        }
     }
 
     func toggle(under button: NSStatusBarButton) {

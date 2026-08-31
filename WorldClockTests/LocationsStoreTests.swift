@@ -56,10 +56,19 @@ struct LocationsStoreTests {
         let directory = makeTempDirectory()
 
         let first = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
-        first.add(Location(cityName: "Kathmandu", timeZone: TimeZone(identifier: "Asia/Kathmandu")!))
+        first.add(
+            Location(
+                cityName: "Kathmandu",
+                timeZone: TimeZone(identifier: "Asia/Kathmandu")!,
+                latitude: 27.7017,
+                longitude: 85.3206
+            )
+        )
 
         let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
         #expect(relaunched.locations.map(\.cityName) == ["Berlin", "London", "New York", "Tokyo", "Kathmandu"])
+        #expect(relaunched.locations.last?.latitude == 27.7017)
+        #expect(relaunched.locations.last?.longitude == 85.3206)
     }
 
     @Test("Removing a Location persists across relaunch")
@@ -89,6 +98,26 @@ struct LocationsStoreTests {
         let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
         #expect(relaunched.locations.map(\.cityName) == ["Tokyo", "Berlin", "London", "New York"])
         #expect(relaunched.home?.timeZone.identifier == "Asia/Tokyo")
+    }
+
+    @Test("Backfilling fills only missing coordinates and persists them")
+    @MainActor
+    func backfillCoordinates() {
+        let directory = makeTempDirectory()
+        let store = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+        #expect(store.home?.latitude == nil)
+
+        store.backfillCoordinates { location in
+            location.cityName == "Berlin" ? (latitude: 52.5200, longitude: 13.4050) : nil
+        }
+
+        #expect(store.home?.latitude == 52.5200)
+        #expect(store.home?.longitude == 13.4050)
+        // London's seeded coordinate is untouched.
+        #expect(store.locations[1].latitude == 51.5074)
+
+        let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+        #expect(relaunched.home?.latitude == 52.5200)
     }
 
     @Test("Adding a Location in a timezone already in the list is refused")
