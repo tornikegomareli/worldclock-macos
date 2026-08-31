@@ -7,6 +7,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     static let panelSize = NSSize(width: 320, height: 360)
 
     private let panel: FloatingPanel
+    private let engine = TimeEngine()
 
     override init() {
         panel = FloatingPanel(
@@ -25,7 +26,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.transient, .ignoresCycle]
-        panel.contentViewController = NSHostingController(rootView: PanelContentView())
+        panel.contentViewController = NSHostingController(rootView: PanelContentView(engine: engine))
+        engine.startTicking()
     }
 
     func toggle(under button: NSStatusBarButton) {

@@ -20,6 +20,9 @@ let project = Project(
             ]),
             buildableFolders: [
                 "WorldClock/Sources"
+            ],
+            dependencies: [
+                .external(name: "Dependencies")
             ]
         ),
         .target(
@@ -32,7 +35,10 @@ let project = Project(
                 "WorldClockTests"
             ],
             dependencies: [
-                .target(name: "WorldClock")
+                .target(name: "WorldClock"),
+                .external(name: "Dependencies"),
+                .external(name: "Clocks"),
+                .external(name: "ConcurrencyExtras"),
             ]
         ),
     ]
