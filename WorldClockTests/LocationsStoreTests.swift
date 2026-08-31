@@ -91,6 +91,17 @@ struct LocationsStoreTests {
         #expect(relaunched.home?.timeZone.identifier == "Asia/Tokyo")
     }
 
+    @Test("Adding a Location in a timezone already in the list is refused")
+    @MainActor
+    func duplicateTimeZoneAddIsRefused() {
+        let store = makeStore(directory: makeTempDirectory(), systemTimeZone: "Europe/Berlin")
+
+        // Yokohama shares Asia/Tokyo with the seeded Tokyo Location.
+        store.add(Location(cityName: "Yokohama", timeZone: TimeZone(identifier: "Asia/Tokyo")!))
+
+        #expect(store.locations.map(\.cityName) == ["Berlin", "London", "New York", "Tokyo"])
+    }
+
     @Test("Removing Home promotes the next Location to Home")
     @MainActor
     func removingHomePromotesNextLocation() {

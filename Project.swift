@@ -19,7 +19,8 @@ let project = Project(
                 "LSUIElement": true,
             ]),
             buildableFolders: [
-                "WorldClock/Sources"
+                "WorldClock/Sources",
+                "WorldClock/Resources",
             ],
             dependencies: [
                 .external(name: "Dependencies")

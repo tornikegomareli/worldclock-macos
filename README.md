@@ -33,6 +33,25 @@ xcodebuild test -workspace WorldClock.xcworkspace -scheme WorldClock -destinatio
 
 Tests use Swift Testing. CI runs build + tests on every push to `main` and on pull requests.
 
+## City database
+
+The offline city index is generated from the GeoNames cities15000 dataset and
+committed at `WorldClock/Resources/cities.json`. To refresh it:
+
+```sh
+python3 Scripts/generate_city_database.py
+```
+
+The script downloads the current GeoNames snapshot when run (the dump is not
+versioned upstream, so the committed index is the reproducibility anchor).
+The app itself never touches the network.
+
+## Attribution
+
+City data: [GeoNames](https://www.geonames.org), licensed under
+[CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/). This attribution
+belongs in the app's About screen once it exists.
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).

@@ -37,6 +37,8 @@ final class LocationsStore {
     }
 
     func add(_ location: Location) {
+        // One Location per timezone while Location.id is the zone identifier.
+        guard !locations.contains(where: { $0.id == location.id }) else { return }
         locations.append(location)
     }
 

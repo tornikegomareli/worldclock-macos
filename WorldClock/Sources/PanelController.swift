@@ -2,12 +2,19 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// The Panel's row-selection state — shell state shared between the List and
-/// the window-level Delete key handler.
+/// The Panel's UI state — selection and the search overlay — shared between
+/// the SwiftUI content and the window-level key handlers.
 @MainActor
 @Observable
-final class PanelSelection {
+final class PanelState {
     var selectedLocationID: Location.ID?
+    var isSearching = false
+    var searchQuery = ""
+
+    func cancelSearch() {
+        isSearching = false
+        searchQuery = ""
+    }
 }
 
 /// Owns the floating Panel: opens it anchored under the status item, closes on focus loss.
@@ -18,7 +25,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let panel: FloatingPanel
     private let engine = TimeEngine()
     private let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
-    private let selection = PanelSelection()
+    private let state = PanelState()
+    private let databaseLoader = CityDatabaseLoader()
 
     override init() {
         panel = FloatingPanel(
@@ -38,14 +46,23 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.transient, .ignoresCycle]
         panel.contentViewController = NSHostingController(
-            rootView: PanelContentView(engine: engine, store: store, selection: selection)
+            rootView: PanelContentView(engine: engine, store: store, state: state, databaseLoader: databaseLoader)
         )
         panel.onDeleteKey = { [weak self] in
-            guard let self, let id = selection.selectedLocationID else { return }
+            guard let self, let id = state.selectedLocationID else { return }
             store.remove(id: id)
-            selection.selectedLocationID = nil
+            state.selectedLocationID = nil
+        }
+        panel.onEscape = { [weak self] in
+            guard let self, state.isSearching else { return false }
+            state.cancelSearch()
+            return true
+        }
+        panel.onAddKey = { [weak self] in
+            self?.state.isSearching = true
         }
         engine.startTicking()
+        databaseLoader.load()
     }
 
     func toggle(under button: NSStatusBarButton) {
