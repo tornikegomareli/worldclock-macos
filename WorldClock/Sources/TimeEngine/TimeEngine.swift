@@ -20,6 +20,10 @@ final class TimeEngine {
     private(set) var state: TimeState = .now
     private(set) var globalInstant: Date
 
+    /// The real clock, regardless of Time State — for "relative to now"
+    /// display like the Time Travel header.
+    var now: Date { date.now }
+
     @ObservationIgnored @Dependency(\.date) private var date
     @ObservationIgnored @Dependency(\.continuousClock) private var tickClock
     @ObservationIgnored private var tickTask: Task<Void, Never>?
@@ -42,6 +46,21 @@ final class TimeEngine {
     func returnToNow() {
         state = .now
         globalInstant = date.now
+    }
+
+    /// Scrubbing: converts a Day Line drag into the one Global Instant
+    /// (ADR-0001), clamped to ±7 days around Now. `anchor` is the instant
+    /// whose civil day the Day Line showed when the drag started — frozen for
+    /// the whole drag so fractions past the edge extrapolate stably instead
+    /// of re-anchoring on every event.
+    func scrub(toDayFraction fraction: Double, in timeZone: TimeZone, anchoredAt anchor: Date) {
+        guard fraction.isFinite else { return }
+        let candidate = ScrubberLogic.instant(
+            atDayFraction: fraction,
+            overDayContaining: anchor,
+            in: timeZone
+        )
+        simulate(ScrubberLogic.clamped(candidate, around: date.now))
     }
 
     /// The first whole-minute instant at or after `instant`.

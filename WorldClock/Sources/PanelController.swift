@@ -54,12 +54,24 @@ final class PanelController: NSObject, NSWindowDelegate {
             state.selectedLocationID = nil
         }
         panel.onEscape = { [weak self] in
-            guard let self, state.isSearching else { return false }
-            state.cancelSearch()
-            return true
+            guard let self else { return false }
+            if state.isSearching {
+                state.cancelSearch()
+                return true
+            }
+            // CONTEXT.md: Esc returns the Time State to Now; the panel closes
+            // only from Now mode.
+            if engine.state != .now {
+                returnToNowAnimated()
+                return true
+            }
+            return false
         }
         panel.onAddKey = { [weak self] in
             self?.state.isSearching = true
+        }
+        panel.onNowKey = { [weak self] in
+            self?.returnToNowAnimated()
         }
         engine.startTicking()
         databaseLoader.load { [weak self] database in
@@ -72,6 +84,11 @@ final class PanelController: NSObject, NSWindowDelegate {
                     .map { (latitude: $0.latitude, longitude: $0.longitude) }
             }
         }
+    }
+
+    private func returnToNowAnimated() {
+        guard engine.state != .now else { return }
+        withAnimation(.spring(duration: 0.4)) { engine.returnToNow() }
     }
 
     func toggle(under button: NSStatusBarButton) {

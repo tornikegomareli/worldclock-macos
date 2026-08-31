@@ -5,6 +5,11 @@ import SwiftUI
 /// emoji.
 struct DayLineView: View {
     let dayLine: DayLine
+    /// Called with the drag's day fraction while scrubbing; may run past
+    /// [0, 1] when the drag leaves the bar.
+    var onScrub: ((Double) -> Void)?
+    /// Called when the drag ends, so the scrub anchor can be released.
+    var onScrubEnded: (() -> Void)?
 
     private static let nightColor = Color(red: 0.10, green: 0.12, blue: 0.25)
     private static let twilightColor = Color(red: 0.80, green: 0.45, blue: 0.30)
@@ -36,6 +41,17 @@ struct DayLineView: View {
                         y: geometry.size.height / 2
                     )
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { value in
+                        guard width > 0 else { return }
+                        onScrub?(value.location.x / width)
+                    }
+                    .onEnded { _ in
+                        onScrubEnded?()
+                    }
+            )
         }
         .frame(height: 14)
     }

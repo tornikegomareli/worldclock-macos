@@ -7,14 +7,27 @@ import AppKit
 @MainActor
 final class FloatingPanel: NSPanel {
     /// Return true when the key was handled (e.g. the search overlay was
-    /// open and is now dismissed); false lets the panel close instead.
+    /// open and is now dismissed, or Time Travel returned to Now); false
+    /// lets the panel close instead.
     var onEscape: (() -> Bool)?
     var onDeleteKey: (() -> Void)?
     var onAddKey: (() -> Void)?
+    var onNowKey: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
 
-    override func keyDown(with event: NSEvent) {
+    /// Shortcuts are intercepted before the responder chain — the List's
+    /// type-select would otherwise swallow letters that match a row (N for
+    /// "New York"). While a text field is editing, everything passes through
+    /// so typing works; the field editor routes its own Esc/Return.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, !(firstResponder is NSText), handleShortcut(event) {
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    private func handleShortcut(_ event: NSEvent) -> Bool {
         let escapeKeyCode: UInt16 = 53
         let deleteKeyCode: UInt16 = 51
         switch event.keyCode {
@@ -22,15 +35,22 @@ final class FloatingPanel: NSPanel {
             if onEscape?() != true {
                 close()
             }
+            return true
         case deleteKeyCode where onDeleteKey != nil:
             onDeleteKey?()
+            return true
         default:
             let hasModifiers = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
-            if !hasModifiers, event.charactersIgnoringModifiers?.lowercased() == "a", let onAddKey {
+            guard !hasModifiers, let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+            if key == "a", let onAddKey {
                 onAddKey()
-            } else {
-                super.keyDown(with: event)
+                return true
             }
+            if key == "n", let onNowKey {
+                onNowKey()
+                return true
+            }
+            return false
         }
     }
 }

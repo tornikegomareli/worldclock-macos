@@ -10,6 +10,9 @@ struct PanelContentView: View {
     @Bindable var state: PanelState
     let databaseLoader: CityDatabaseLoader
 
+    /// The frozen anchor day for the drag in progress, if any.
+    @State private var scrubAnchor: Date?
+
     private let clockFormat = ClockFormat.system()
 
     var body: some View {
@@ -17,11 +20,60 @@ struct PanelContentView: View {
             if state.isSearching {
                 searchOverlay
             } else {
+                timeStateHeader
                 locationList
                 addLocationFooter
             }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: Time State header
+
+    @ViewBuilder
+    private var timeStateHeader: some View {
+        if case .simulated = engine.state {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption)
+                Text("Time Travel · \(timeTravelLabel)")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Button("Now") {
+                    withAnimation(.spring(duration: 0.4)) { engine.returnToNow() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.orange.opacity(0.12))
+        } else {
+            HStack {
+                Text("Now")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+    }
+
+    /// "Tomorrow · 16:30" — the simulated moment in Home's zone, relative to
+    /// the real clock.
+    private var timeTravelLabel: String {
+        let homeZone = store.home?.timeZone ?? .current
+        let day = TimeFormatting.relativeDayLabel(
+            of: engine.globalInstant, in: homeZone,
+            relativeTo: engine.now, in: homeZone
+        ) ?? "Today"
+        let time = TimeFormatting.timeString(
+            LocalTime(of: engine.globalInstant, in: homeZone),
+            clockFormat: clockFormat
+        )
+        return "\(day) · \(time)"
     }
 
     // MARK: Location list
@@ -45,6 +97,11 @@ struct PanelContentView: View {
         let homeZone = store.home?.timeZone ?? location.timeZone
         let offset = RelativeOffset(of: location.timeZone, home: homeZone, at: instant)
 
+        let dateLabel = TimeFormatting.relativeDayLabel(
+            of: instant, in: location.timeZone,
+            relativeTo: instant, in: homeZone
+        )
+
         return VStack(spacing: 4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -55,10 +112,28 @@ struct PanelContentView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
-                    .font(.title3.monospacedDigit())
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
+                        .font(.title3.monospacedDigit())
+                    if let dateLabel {
+                        Text(dateLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.15), value: dateLabel)
             }
-            DayLineView(dayLine: DayLineModel.dayLine(for: location, at: instant))
+            DayLineView(
+                dayLine: DayLineModel.dayLine(for: location, at: instant),
+                onScrub: { fraction in
+                    // The anchor day freezes at drag start so fractions past
+                    // the edge extrapolate stably (see TimeEngine.scrub).
+                    let anchor = scrubAnchor ?? engine.globalInstant
+                    scrubAnchor = anchor
+                    engine.scrub(toDayFraction: fraction, in: location.timeZone, anchoredAt: anchor)
+                },
+                onScrubEnded: { scrubAnchor = nil }
+            )
         }
         .padding(.vertical, 4)
     }

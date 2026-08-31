@@ -28,6 +28,42 @@ enum TimeFormatting {
         }
     }
 
+    /// Labels `target`'s civil date relative to `reference`'s: nil when they
+    /// match, "Yesterday"/"Tomorrow" one day apart, otherwise "Mon, Jul 13"
+    /// (pinned en_US names — localization comes with GreetingProvider).
+    static func relativeDayLabel(
+        of target: Date, in targetZone: TimeZone,
+        relativeTo reference: Date, in referenceZone: TimeZone
+    ) -> String? {
+        let dayDelta = civilDayNumber(of: target, in: targetZone) - civilDayNumber(of: reference, in: referenceZone)
+        switch dayDelta {
+        case 0:
+            return nil
+        case 1:
+            return "Tomorrow"
+        case -1:
+            return "Yesterday"
+        default:
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = targetZone
+            formatter.dateFormat = "EEE, MMM d"
+            return formatter.string(from: target)
+        }
+    }
+
+    /// A civil date as a comparable day count, independent of timezone.
+    private static func civilDayNumber(of date: Date, in timeZone: TimeZone) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = .gmt
+        let civilDate = utcCalendar.date(from: components) ?? date
+        return Int((civilDate.timeIntervalSince1970 / 86400).rounded(.down))
+    }
+
     /// "+5h", "-9h", "+4:30", "0h" for zero.
     static func relativeOffset(seconds: Int) -> String {
         if seconds == 0 { return "0h" }
