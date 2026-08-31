@@ -1,37 +1,41 @@
 import SwiftUI
 
-/// Panel content: one row per Location, all rendering the same Global Instant.
+/// Panel content: the Location list, every Local Time rendering the same
+/// Global Instant. A selected Location can be removed with Delete and the
+/// list drag-reordered; the first Location is Home and anchors Relative Mode
+/// offsets.
 struct PanelContentView: View {
     let engine: TimeEngine
+    let store: LocationsStore
+    @Bindable var selection: PanelSelection
 
-    private let locations = Location.defaults
-    private let home = TimeZone.current
     private let clockFormat = ClockFormat.system()
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(locations) { location in
+        List(selection: $selection.selectedLocationID) {
+            ForEach(store.locations) { location in
                 row(for: location)
-                if location.id != locations.last?.id {
-                    Divider().padding(.horizontal, 12)
-                }
+                    .tag(location.id)
             }
+            .onMove { store.move(fromOffsets: $0, toOffset: $1) }
         }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func row(for location: Location) -> some View {
         let instant = engine.globalInstant
         let localTime = LocalTime(of: instant, in: location.timeZone)
-        let offset = RelativeOffset(of: location.timeZone, home: home, at: instant)
+        let isHome = location.id == store.home?.id
+        let homeZone = store.home?.timeZone ?? location.timeZone
+        let offset = RelativeOffset(of: location.timeZone, home: homeZone, at: instant)
 
         return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(location.cityName)
                     .font(.body)
-                Text(TimeFormatting.relativeOffset(seconds: offset.seconds))
+                Text(isHome ? "Home" : TimeFormatting.relativeOffset(seconds: offset.seconds))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -39,7 +43,6 @@ struct PanelContentView: View {
             Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
                 .font(.title3.monospacedDigit())
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
     }
 }

@@ -1,5 +1,14 @@
 import AppKit
+import Observation
 import SwiftUI
+
+/// The Panel's row-selection state — shell state shared between the List and
+/// the window-level Delete key handler.
+@MainActor
+@Observable
+final class PanelSelection {
+    var selectedLocationID: Location.ID?
+}
 
 /// Owns the floating Panel: opens it anchored under the status item, closes on focus loss.
 @MainActor
@@ -8,6 +17,8 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private let panel: FloatingPanel
     private let engine = TimeEngine()
+    private let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
+    private let selection = PanelSelection()
 
     override init() {
         panel = FloatingPanel(
@@ -26,7 +37,14 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.transient, .ignoresCycle]
-        panel.contentViewController = NSHostingController(rootView: PanelContentView(engine: engine))
+        panel.contentViewController = NSHostingController(
+            rootView: PanelContentView(engine: engine, store: store, selection: selection)
+        )
+        panel.onDeleteKey = { [weak self] in
+            guard let self, let id = selection.selectedLocationID else { return }
+            store.remove(id: id)
+            selection.selectedLocationID = nil
+        }
         engine.startTicking()
     }
 
