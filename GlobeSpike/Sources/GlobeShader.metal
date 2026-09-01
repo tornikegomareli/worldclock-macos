@@ -42,6 +42,13 @@ void globeSurface(realitykit::surface_parameters params)
     float band = exp(-pow(ndotl / 0.09, 2.0));
     color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.18h;
 
+    // Ocean sun glint: a tight mirror lobe on water only (mask in the custom
+    // texture slot), day side only — the classic sunrise stripe on the sea.
+    half waterMask = params.textures().custom().sample(linearSampler, uv).r;
+    float3 reflected = reflect(-sunDirection, normal);
+    float glint = pow(saturate(dot(reflected, -viewDirection)), 90.0);
+    color += half3(1.0h, 0.90h, 0.72h) * half(glint) * waterMask * half(dayFactor) * 0.55h;
+
     // Atmospheric rim: blue scattering climbing toward the limb, stronger on
     // the day side, a whisper on the night side.
     float facing = saturate(dot(normal, -viewDirection));

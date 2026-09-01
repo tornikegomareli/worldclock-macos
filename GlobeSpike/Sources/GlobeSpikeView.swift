@@ -144,6 +144,7 @@ final class GlobeScene {
         var material = try CustomMaterial(surfaceShader: surfaceShader, lightingModel: .unlit)
         material.baseColor.texture = .init(try TextureResource.load(named: "earth-day"))
         material.emissiveColor.texture = .init(try TextureResource.load(named: "earth-night"))
+        material.custom.texture = .init(try TextureResource.load(named: "water-mask"))
         material.custom.value = SIMD4(1, 0, 0, 0)
 
         let globe = ModelEntity(mesh: .generateSphere(radius: 1), materials: [material])
