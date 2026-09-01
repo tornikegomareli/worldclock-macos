@@ -104,6 +104,16 @@ struct TimeFormattingTests {
         )
     }
 
+    @Test("UTC Mode strings: whole hours, non-integer zones, and UTC itself")
+    func utcOffsetStrings() {
+        #expect(TimeFormatting.utcOffset(seconds: 9 * 3600) == "UTC+9")
+        #expect(TimeFormatting.utcOffset(seconds: -5 * 3600) == "UTC-5")
+        #expect(TimeFormatting.utcOffset(seconds: 330 * 60) == "UTC+5:30")   // Kolkata
+        #expect(TimeFormatting.utcOffset(seconds: 345 * 60) == "UTC+5:45")   // Kathmandu
+        #expect(TimeFormatting.utcOffset(seconds: -210 * 60) == "UTC-3:30")  // St. John's (winter)
+        #expect(TimeFormatting.utcOffset(seconds: 0) == "UTC")
+    }
+
     @Test("System clock format follows the locale's hour cycle, pinned locales only")
     func systemClockFormatFromLocale() {
         #expect(ClockFormat.system(for: Locale(identifier: "en_US")) == .twelveHour)

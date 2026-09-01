@@ -13,11 +13,13 @@ extension KeyboardShortcuts.Name {
 @MainActor
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
-    private let panelController = PanelController()
-    private var shortcutWindow: NSWindow?
+    private let settings = SettingsStore()
+    private let panelController: PanelController
+    private var settingsWindow: NSWindow?
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        panelController = PanelController(settings: settings)
         super.init()
         if let button = statusItem.button {
             button.image = Self.makeTiltedEarthIcon()
@@ -47,13 +49,13 @@ final class StatusItemController: NSObject {
 
     private func showMenu() {
         let menu = NSMenu()
-        let shortcutItem = NSMenuItem(
-            title: "Set Shortcut…",
-            action: #selector(openShortcutSettings),
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(openSettings),
             keyEquivalent: ""
         )
-        shortcutItem.target = self
-        menu.addItem(shortcutItem)
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(title: "Quit WorldClock", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -64,21 +66,21 @@ final class StatusItemController: NSObject {
         statusItem.menu = nil
     }
 
-    @objc private func openShortcutSettings() {
-        if shortcutWindow == nil {
+    @objc private func openSettings() {
+        if settingsWindow == nil {
             let window = NSWindow(
                 contentRect: .zero,
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "WorldClock Shortcut"
+            window.title = "WorldClock Settings"
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: ShortcutSettingsView())
-            shortcutWindow = window
+            window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
+            settingsWindow = window
         }
-        shortcutWindow?.center()
-        shortcutWindow?.makeKeyAndOrderFront(nil)
+        settingsWindow?.center()
+        settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
 

@@ -29,8 +29,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let state = PanelState()
     private let databaseLoader = CityDatabaseLoader()
     private let keyRouter = PanelKeyRouter()
+    private let settings: SettingsStore
 
-    override init() {
+    init(settings: SettingsStore) {
+        self.settings = settings
         panel = FloatingPanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -48,7 +50,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.transient, .ignoresCycle]
         panel.contentViewController = NSHostingController(
-            rootView: PanelContentView(engine: engine, store: store, state: state, databaseLoader: databaseLoader)
+            rootView: PanelContentView(
+                engine: engine, store: store, state: state,
+                databaseLoader: databaseLoader, settings: settings
+            )
         )
         registerKeys()
         engine.startTicking()
@@ -74,6 +79,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         keyRouter.bind(.delete) { [weak self] in self?.removeSelectedLocation() }
         keyRouter.bind(.character("a")) { [weak self] in self?.state.isSearching = true }
         keyRouter.bind(.character("n")) { [weak self] in self?.returnToNowAnimated() }
+        keyRouter.bind(.character("u")) { [weak self] in self?.toggleOffsetMode() }
         panel.onKeyEvent = { [weak self] event in
             self?.keyRouter.handle(event) ?? false
         }
@@ -136,6 +142,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         if state.inspectedLocationID == id {
             setInspection(nil)
         }
+    }
+
+    private func toggleOffsetMode() {
+        settings.offsetMode = settings.offsetMode == .relative ? .utc : .relative
     }
 
     private func returnToNowAnimated() {

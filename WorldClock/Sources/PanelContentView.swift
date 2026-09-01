@@ -10,12 +10,18 @@ struct PanelContentView: View {
     let store: LocationsStore
     @Bindable var state: PanelState
     let databaseLoader: CityDatabaseLoader
+    let settings: SettingsStore
 
     /// The drag in progress: its frozen anchor day plus the raw/effective
     /// fraction accumulator that implements Shift precision.
     @State private var scrubDrag: (anchor: Date, previousRaw: Double, effective: Double)?
 
-    private let clockFormat = ClockFormat.system()
+    /// The Location whose offset caption transiently shows both
+    /// interpretations after a click.
+    @State private var revealedOffsetID: Location.ID?
+    @State private var revealResetTask: Task<Void, Never>?
+
+    private var clockFormat: ClockFormat { settings.resolvedClockFormat }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,9 +117,16 @@ struct PanelContentView: View {
                     Text(location.cityName)
                         .font(.body)
                         .background(HiddenListScrollers())
-                    Text(isHome ? "Home" : TimeFormatting.relativeOffset(seconds: offset.seconds))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // A Button, not a tap gesture: the List's row selection
+                    // swallows plain gestures on row content.
+                    Button {
+                        revealBothOffsets(for: location.id)
+                    } label: {
+                        Text(offsetCaption(for: location, isHome: isHome, relativeOffset: offset, at: instant))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
@@ -191,6 +204,30 @@ struct PanelContentView: View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .transition(.opacity)
+    }
+
+    /// Relative Mode or UTC Mode caption; a click transiently shows both.
+    private func offsetCaption(for location: Location, isHome: Bool, relativeOffset: RelativeOffset, at instant: Date) -> String {
+        let relativeText = isHome ? "Home" : TimeFormatting.relativeOffset(seconds: relativeOffset.seconds)
+        let utcText = TimeFormatting.utcOffset(seconds: location.timeZone.secondsFromGMT(for: instant))
+        if revealedOffsetID == location.id {
+            return "\(relativeText) · \(utcText)"
+        }
+        if settings.offsetMode == .relative {
+            return relativeText
+        }
+        // Home keeps its marker in UTC Mode — it stays the reference point.
+        return isHome ? "\(relativeText) · \(utcText)" : utcText
+    }
+
+    private func revealBothOffsets(for id: Location.ID) {
+        withAnimation(.easeInOut(duration: 0.15)) { revealedOffsetID = id }
+        revealResetTask?.cancel()
+        revealResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, revealedOffsetID == id else { return }
+            withAnimation(.easeInOut(duration: 0.15)) { revealedOffsetID = nil }
+        }
     }
 
     private var addLocationFooter: some View {

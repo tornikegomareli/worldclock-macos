@@ -64,16 +64,28 @@ enum TimeFormatting {
         return Int((civilDate.timeIntervalSince1970 / 86400).rounded(.down))
     }
 
+    /// UTC Mode: "UTC+9", "UTC-5", "UTC+5:30", plain "UTC" for zero.
+    static func utcOffset(seconds: Int) -> String {
+        guard seconds != 0 else { return "UTC" }
+        let parts = signedHoursMinutes(seconds: seconds)
+        if parts.minutes == 0 {
+            return "UTC\(parts.sign)\(parts.hours)"
+        }
+        return String(format: "UTC%@%d:%02d", parts.sign, parts.hours, parts.minutes)
+    }
+
     /// "+5h", "-9h", "+4:30", "0h" for zero.
     static func relativeOffset(seconds: Int) -> String {
         if seconds == 0 { return "0h" }
-        let sign = seconds < 0 ? "-" : "+"
-        let totalMinutes = abs(seconds) / 60
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-        if minutes == 0 {
-            return "\(sign)\(hours)h"
+        let parts = signedHoursMinutes(seconds: seconds)
+        if parts.minutes == 0 {
+            return "\(parts.sign)\(parts.hours)h"
         }
-        return String(format: "%@%d:%02d", sign, hours, minutes)
+        return String(format: "%@%d:%02d", parts.sign, parts.hours, parts.minutes)
+    }
+
+    private static func signedHoursMinutes(seconds: Int) -> (sign: String, hours: Int, minutes: Int) {
+        let totalMinutes = abs(seconds) / 60
+        return (seconds < 0 ? "-" : "+", totalMinutes / 60, totalMinutes % 60)
     }
 }
