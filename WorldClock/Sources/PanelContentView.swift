@@ -90,6 +90,7 @@ struct PanelContentView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
     }
 
     private func locationRow(for location: Location) -> some View {
@@ -199,6 +200,7 @@ struct PanelContentView: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
             .overlay {
                 if databaseLoader.database == nil {
                     Text("Loading cities…").foregroundStyle(.secondary)
