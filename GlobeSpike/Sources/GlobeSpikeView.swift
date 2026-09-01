@@ -48,6 +48,11 @@ struct GlobeSpikeView: View {
                         }
                         .onEnded { _ in scene.endOrbit() }
                 )
+                .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in scene.magnify(to: value.magnification) }
+                        .onEnded { _ in scene.endMagnify() }
+                )
                 .onTapGesture { point in
                     if let coordinate = scene.pick(at: point) {
                         pickReadout = String(
@@ -88,7 +93,8 @@ struct GlobeSpikeView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Toggle("Animate", isOn: $animating)
-                Text(String(format: "%.1f ms/update", scene.lastUpdateMilliseconds))
+                Text(String(format: "cam v2 · zoom %.2f · scrolls %d · %.1f ms/update",
+                            scene.cameraDistance, scene.scrollEventCount, scene.lastUpdateMilliseconds))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
@@ -117,7 +123,10 @@ final class GlobeScene {
     private var pitch = 0.0
     private var distance = 3.0
     private var dragStart: (yaw: Double, pitch: Double)?
+    private var magnifyStartDistance: Double?
     private var scrollMonitor: Any?
+    private(set) var scrollEventCount = 0
+    var cameraDistance: Double { distance }
 
     struct Coordinate {
         let latitude: Double
@@ -173,11 +182,25 @@ final class GlobeScene {
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return event }
             MainActor.assumeIsolated {
-                self.distance = min(max(self.distance * (1 - event.scrollingDeltaY * 0.005), 1.3), 8)
+                self.scrollEventCount += 1
+                let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 8
+                self.distance = min(max(self.distance * (1 - delta * 0.005), 1.3), 8)
                 self.positionCamera()
             }
             return event
         }
+    }
+
+    /// Trackpad pinch: scales from the distance at gesture start.
+    func magnify(to magnification: CGFloat) {
+        let start = magnifyStartDistance ?? distance
+        magnifyStartDistance = start
+        distance = min(max(start / Double(magnification), 1.3), 8)
+        positionCamera()
+    }
+
+    func endMagnify() {
+        magnifyStartDistance = nil
     }
 
     private func positionCamera() {
