@@ -122,7 +122,7 @@ struct PanelContentView: View {
         return VStack(spacing: 4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(location.cityName)
+                    Text(isHome ? homeTitle(for: location) : location.cityName)
                         .font(.body)
                         .background(HiddenListScrollers())
                     // A Button, not a tap gesture: the List's row selection
@@ -434,6 +434,14 @@ struct PanelContentView: View {
 
     private func countryName(for code: String) -> String? {
         Locale.current.localizedString(forRegionCode: code)
+    }
+
+    /// Home shows the resolved city with its country: "Tbilisi, Georgia".
+    private func homeTitle(for location: Location) -> String {
+        guard let code = location.country, let name = countryName(for: code) else {
+            return location.cityName
+        }
+        return "\(location.cityName), \(name)"
     }
 
 }

@@ -158,6 +158,65 @@ struct LocationsStoreTests {
         #expect(store.home != nil)
     }
 
+    @Test("Traveling: updating Home swaps the first Location to the resolved City and persists")
+    @MainActor
+    func updateHomeToCity() {
+        let directory = makeTempDirectory()
+        let store = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+
+        let tbilisi = City(
+            name: "Tbilisi", asciiName: "Tbilisi", country: "GE",
+            latitude: 41.6938, longitude: 44.8015, timeZone: "Asia/Tbilisi",
+            alternates: [], population: 1_049_498
+        )
+        store.updateHome(to: tbilisi)
+
+        #expect(store.home?.cityName == "Tbilisi")
+        #expect(store.home?.timeZone.identifier == "Asia/Tbilisi")
+        #expect(store.home?.country == "GE")
+        #expect(store.home?.latitude == 41.6938)
+        // The rest of the list is untouched.
+        #expect(store.locations.map(\.cityName) == ["Tbilisi", "London", "New York", "Tokyo"])
+
+        let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+        #expect(relaunched.home?.cityName == "Tbilisi")
+    }
+
+    @Test("Traveling into a listed timezone drops the now-duplicate row")
+    @MainActor
+    func updateHomeDropsDuplicateZone() {
+        let store = makeStore(directory: makeTempDirectory(), systemTimeZone: "Europe/Berlin")
+
+        // Yokohama shares Asia/Tokyo with the listed Tokyo Location.
+        let yokohama = City(
+            name: "Yokohama", asciiName: "Yokohama", country: "JP",
+            latitude: 35.44, longitude: 139.64, timeZone: "Asia/Tokyo",
+            alternates: [], population: 3_761_630
+        )
+        store.updateHome(to: yokohama)
+
+        #expect(store.home?.cityName == "Yokohama")
+        #expect(store.locations.map(\.cityName) == ["Yokohama", "London", "New York"])
+    }
+
+    @Test("Updating Home to the city it already is changes nothing")
+    @MainActor
+    func updateHomeNoOp() {
+        let store = makeStore(directory: makeTempDirectory(), systemTimeZone: "Europe/Berlin")
+        let before = store.locations
+
+        let berlin = City(
+            name: "Berlin", asciiName: "Berlin", country: "DE",
+            latitude: 52.52, longitude: 13.405, timeZone: "Europe/Berlin",
+            alternates: [], population: 3_426_354
+        )
+        store.updateHome(to: berlin)
+        store.updateHome(to: berlin)
+
+        #expect(store.locations.count == before.count)
+        #expect(store.home?.cityName == "Berlin")
+    }
+
     @Test("Import replaces the whole list and persists; reset reseeds")
     @MainActor
     func replaceAllAndReset() {

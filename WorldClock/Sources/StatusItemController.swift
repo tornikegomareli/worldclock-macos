@@ -16,6 +16,7 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let settings = SettingsStore()
     private let panelController: PanelController
+    private var homeLocationUpdater: HomeLocationUpdater?
     private var settingsWindow: NSWindow?
 
     override init() {
@@ -23,6 +24,11 @@ final class StatusItemController: NSObject {
         panelController = PanelController(settings: settings)
         super.init()
         panelController.openSettingsHandler = { [weak self] in self?.openSettings() }
+        homeLocationUpdater = HomeLocationUpdater(
+            settings: settings,
+            store: panelController.store,
+            databaseLoader: panelController.databaseLoader
+        )
         if let button = statusItem.button {
             button.image = Self.makeTiltedEarthIcon()
             button.target = self

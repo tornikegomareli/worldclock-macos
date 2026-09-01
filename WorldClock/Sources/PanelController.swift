@@ -33,7 +33,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     let engine = TimeEngine()
     let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
     private let state = PanelState()
-    private let databaseLoader = CityDatabaseLoader()
+    let databaseLoader = CityDatabaseLoader()
     private let keyRouter = PanelKeyRouter()
     private let settings: SettingsStore
     private let weatherStore = WeatherStore(provider: WeatherKitProvider())

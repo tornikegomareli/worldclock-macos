@@ -26,6 +26,8 @@ let project = Project(
             deploymentTargets: .macOS("15.0"),
             infoPlist: .extendingDefault(with: [
                 "LSUIElement": true,
+                "NSLocationUsageDescription": "WorldClock keeps your Home Location on the nearest city while you travel. Your location never leaves this Mac.",
+                "NSLocationWhenInUseUsageDescription": "WorldClock keeps your Home Location on the nearest city while you travel. Your location never leaves this Mac.",
             ]),
             buildableFolders: [
                 "WorldClock/Sources",

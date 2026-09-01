@@ -54,6 +54,22 @@ final class LocationsStore {
         locations.move(fromOffsets: source, toOffset: destination)
     }
 
+    /// Traveling-Home: the first Location becomes the resolved City. A row
+    /// that would now duplicate Home's timezone is dropped; updating to the
+    /// city Home already is changes nothing.
+    func updateHome(to city: City) {
+        guard let timeZone = TimeZone(identifier: city.timeZone) else { return }
+        let newHome = Location(
+            cityName: city.name,
+            timeZone: timeZone,
+            latitude: city.latitude,
+            longitude: city.longitude,
+            country: city.country
+        )
+        guard home != newHome else { return }
+        locations = [newHome] + locations.dropFirst().filter { $0.id != newHome.id }
+    }
+
     /// Import: replaces the whole list (and persists it).
     func replaceAll(with imported: [Location]) {
         guard !imported.isEmpty else { return }

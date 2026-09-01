@@ -30,8 +30,7 @@ struct SettingsView: View {
             KeyboardShortcuts.Recorder("Toggle Panel:", name: .togglePanel)
             LabeledContent("Home:", value: store.home?.cityName ?? "—")
             Toggle("Automatically update Home location", isOn: $settings.autoUpdateHome)
-                .disabled(true)
-                .help("Coming soon — will ask for location permission when enabled.")
+                .help("Keeps Home on the nearest city while you travel. Asks for location permission; your location never leaves this Mac.")
             Picker("Menu bar shows:", selection: $settings.menuBarLocationID) {
                 Text("Icon only").tag(String?.none)
                 ForEach(store.locations) { location in

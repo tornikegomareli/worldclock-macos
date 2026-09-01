@@ -117,6 +117,18 @@ struct CityDatabaseTests {
         #expect(database.search("!@#$%^", at: fixtureInstant).isEmpty)
     }
 
+    @Test("The nearest City resolves from a coordinate — the traveling-Home lookup")
+    func nearestCity() {
+        // Heathrow is London's, not Londonderry's.
+        #expect(database.nearestCity(latitude: 51.47, longitude: -0.45)?.name == "London")
+        // Newark airport resolves to New York.
+        #expect(database.nearestCity(latitude: 40.69, longitude: -74.17)?.name == "New York")
+        // Yokohama's coordinate is nearest to Tokyo in this fixture set.
+        #expect(database.nearestCity(latitude: 35.44, longitude: 139.64)?.name == "Tokyo")
+        // An empty database resolves nothing.
+        #expect(CityDatabase(cities: []).nearestCity(latitude: 0, longitude: 0) == nil)
+    }
+
     @Test("The bundled index loads offline and finds well-known cities")
     func bundledIndexLoads() throws {
         let bundled = try CityDatabase.loadBundled()
