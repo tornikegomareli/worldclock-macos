@@ -39,15 +39,15 @@ void globeSurface(realitykit::surface_parameters params)
     half3 color = mix(night, dayColor, half(dayFactor));
 
     // Warm tint inside the twilight band — strongest right on the
-    // terminator, fading both ways.
-    float band = exp(-pow(ndotl / 0.09, 2.0));
-    color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.18h;
+    // terminator, leaning into the day side so the night side stays clean.
+    float band = exp(-pow(ndotl / 0.06, 2.0)) * (0.25 + 0.75 * dayFactor);
+    color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.14h;
 
     // Ocean sun glint: a tight mirror lobe on water only (mask in the custom
     // texture slot), day side only — the classic sunrise stripe on the sea.
     half waterMask = params.textures().custom().sample(linearSampler, uv).r;
     float3 reflected = reflect(-sunDirection, normal);
-    float glint = pow(saturate(dot(reflected, -viewDirection)), 60.0);
+    float glint = pow(saturate(dot(reflected, viewDirection)), 60.0);
     color += half3(1.0h, 0.90h, 0.72h) * half(glint) * waterMask * half(dayFactor) * 0.9h;
 
     // Debug: custom.vector.w = 1 renders the water mask directly.
@@ -56,8 +56,9 @@ void globeSurface(realitykit::surface_parameters params)
     }
 
     // Atmospheric rim: blue scattering climbing toward the limb, stronger on
-    // the day side, a whisper on the night side.
-    float facing = saturate(dot(normal, -viewDirection));
+    // the day side, a whisper on the night side. Empirical: view_direction()
+    // points fragment → camera.
+    float facing = saturate(dot(normal, viewDirection));
     float rim = pow(1.0 - facing, 2.8);
     color += half3(0.24h, 0.42h, 0.85h) * half(rim) * half(0.10 + 0.45 * dayFactor);
 
@@ -75,7 +76,7 @@ void atmosphereSurface(realitykit::surface_parameters params)
     float3 sunDirection = normalize(params.uniforms().custom_parameter().xyz);
     float3 normal = normalize(params.geometry().model_position());
 
-    float facing = saturate(dot(normal, -viewDirection));
+    float facing = saturate(dot(normal, viewDirection));
     float rim = pow(1.0 - facing, 3.2);
     // The halo also dims on the night side.
     float sunlit = 0.25 + 0.75 * smoothstep(-0.2, 0.3, dot(normal, sunDirection));
