@@ -29,9 +29,10 @@ void globeSurface(realitykit::surface_parameters params)
     // ~0.1-wide band in dot space ≈ real civil+nautical twilight width.
     float dayFactor = smoothstep(-0.03, 0.07, ndotl);
 
-    // Night lights: gentle boost with a soft knee so cities glow richly
-    // without clipping to white.
-    half3 lights = nightColor * 1.6h;
+    // Night lights: subtract the texture's diffuse base first (Black Marble
+    // renders moonlit ice and ocean as a broad glow — Antarctica otherwise
+    // becomes a bright blob), then boost what remains with a soft knee.
+    half3 lights = max(nightColor - 0.09h, 0.0h) * 2.6h;
     lights = lights / (1.0h + lights * 0.6h);
     half3 night = lights * half(1.0 - dayFactor) + half3(0.010h, 0.012h, 0.020h);
 
