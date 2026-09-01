@@ -113,7 +113,9 @@ struct GlobeSpikeView: View {
 @Observable
 final class GlobeScene {
     private var globe: ModelEntity?
+    private var halo: ModelEntity?
     private var material: CustomMaterial?
+    private var atmosphereMaterial: CustomMaterial?
     private var content: RealityViewCameraContent?
     private var camera: PerspectiveCamera?
     private(set) var lastUpdateMilliseconds = 0.0
@@ -148,6 +150,17 @@ final class GlobeScene {
         globe.components.set(CollisionComponent(shapes: [.generateSphere(radius: 1)]))
         globe.components.set(InputTargetComponent())
         content.add(globe)
+
+        // Atmosphere halo: a slightly larger translucent shell, pure fresnel.
+        let atmosphereShader = CustomMaterial.SurfaceShader(named: "atmosphereSurface", in: library)
+        var atmosphere = try CustomMaterial(surfaceShader: atmosphereShader, lightingModel: .unlit)
+        atmosphere.blending = .transparent(opacity: 1.0)
+        atmosphere.faceCulling = .back
+        atmosphere.custom.value = SIMD4(1, 0, 0, 0)
+        let halo = ModelEntity(mesh: .generateSphere(radius: 1.04), materials: [atmosphere])
+        globe.addChild(halo)
+        self.atmosphereMaterial = atmosphere
+        self.halo = halo
 
         let camera = PerspectiveCamera()
         content.add(camera)
@@ -230,6 +243,11 @@ final class GlobeScene {
         )
         globe.model?.materials = [material]
         self.material = material
+        if var atmosphereMaterial, let halo {
+            atmosphereMaterial.custom.value = material.custom.value
+            halo.model?.materials = [atmosphereMaterial]
+            self.atmosphereMaterial = atmosphereMaterial
+        }
 
         lastUpdateMilliseconds = Double(start.duration(to: .now).components.attoseconds) / 1e15
     }

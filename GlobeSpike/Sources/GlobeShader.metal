@@ -20,18 +20,54 @@ void globeSurface(realitykit::surface_parameters params)
     half3 dayColor = params.textures().base_color().sample(linearSampler, uv).rgb;
     half3 nightColor = params.textures().emissive_color().sample(linearSampler, uv).rgb;
 
+    // The sphere is unrotated, so the model normal is the world normal.
     float3 normal = normalize(params.geometry().model_position());
+    float3 viewDirection = normalize(params.geometry().view_direction());
     float3 sunDirection = normalize(params.uniforms().custom_parameter().xyz);
     float ndotl = dot(normal, sunDirection);
 
     // ~0.1-wide band in dot space ≈ real civil+nautical twilight width.
     float dayFactor = smoothstep(-0.03, 0.07, ndotl);
-    // City lights fade out through twilight so they never glow in daylight;
-    // a faint floor keeps the night side's landmass readable.
-    half3 night = nightColor * half(1.0 - dayFactor) * 1.4h + half3(0.012h, 0.014h, 0.022h);
+
+    // Night lights: gentle boost with a soft knee so cities glow richly
+    // without clipping to white.
+    half3 lights = nightColor * 1.6h;
+    lights = lights / (1.0h + lights * 0.6h);
+    half3 night = lights * half(1.0 - dayFactor) + half3(0.010h, 0.012h, 0.020h);
+
     half3 color = mix(night, dayColor, half(dayFactor));
+
+    // Warm tint inside the twilight band — strongest right on the
+    // terminator, fading both ways.
+    float band = exp(-pow(ndotl / 0.09, 2.0));
+    color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.18h;
+
+    // Atmospheric rim: blue scattering climbing toward the limb, stronger on
+    // the day side, a whisper on the night side.
+    float facing = saturate(dot(normal, -viewDirection));
+    float rim = pow(1.0 - facing, 2.8);
+    color += half3(0.24h, 0.42h, 0.85h) * half(rim) * half(0.10 + 0.45 * dayFactor);
 
     params.surface().set_emissive_color(color);
     params.surface().set_base_color(half3(0.0h));
     params.surface().set_roughness(1.0h);
+}
+
+// A translucent shell just above the surface: pure fresnel glow that reads
+// as the atmosphere's halo around the limb.
+[[visible]]
+void atmosphereSurface(realitykit::surface_parameters params)
+{
+    float3 viewDirection = normalize(params.geometry().view_direction());
+    float3 sunDirection = normalize(params.uniforms().custom_parameter().xyz);
+    float3 normal = normalize(params.geometry().model_position());
+
+    float facing = saturate(dot(normal, -viewDirection));
+    float rim = pow(1.0 - facing, 3.2);
+    // The halo also dims on the night side.
+    float sunlit = 0.25 + 0.75 * smoothstep(-0.2, 0.3, dot(normal, sunDirection));
+
+    params.surface().set_emissive_color(half3(0.30h, 0.50h, 0.95h) * half(rim * sunlit));
+    params.surface().set_base_color(half3(0.0h));
+    params.surface().set_opacity(half(rim * sunlit) * 0.55h);
 }
