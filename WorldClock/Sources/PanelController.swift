@@ -30,8 +30,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     static let panelSize = NSSize(width: 320, height: 360)
 
     private let panel: FloatingPanel
-    private let engine = TimeEngine()
-    private let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
+    let engine = TimeEngine()
+    let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
     private let state = PanelState()
     private let databaseLoader = CityDatabaseLoader()
     private let keyRouter = PanelKeyRouter()
@@ -112,7 +112,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         case .cancelSearch:
             state.dismissOverlays()
         case .closeInspection:
-            withAnimation(.easeInOut(duration: 0.15)) { state.inspectedLocationID = nil }
+            withAnimation(settings.animation(.easeInOut(duration: 0.15))) { state.inspectedLocationID = nil }
         case .returnToNow:
             returnToNowAnimated()
         case .clearSelection:
@@ -144,7 +144,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func setInspection(_ id: Location.ID?) {
         guard state.inspectedLocationID != id else { return }
-        withAnimation(.easeInOut(duration: 0.15)) {
+        withAnimation(settings.animation(.easeInOut(duration: 0.15))) {
             state.inspectedLocationID = id
         }
     }
@@ -174,7 +174,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard let zone = TimeZone(identifier: city.timeZone) else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
-            withAnimation(.spring(duration: 0.35)) {
+            withAnimation(settings.animation(.spring(duration: 0.35))) {
                 store.add(
                     Location(
                         cityName: city.name, timeZone: zone,
@@ -217,7 +217,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func returnToNowAnimated() {
         guard engine.state != .now else { return }
-        withAnimation(.spring(duration: 0.4)) { engine.returnToNow() }
+        withAnimation(settings.animation(.spring(duration: 0.4))) { engine.returnToNow() }
     }
 
     func toggle(under button: NSStatusBarButton) {

@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import Observation
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
@@ -30,6 +31,32 @@ final class StatusItemController: NSObject {
         }
         KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
             self?.togglePanel()
+        }
+        updateMenuBarTitle()
+    }
+
+    /// Renders the optional menu-bar time (a chosen Location's Local Time of
+    /// the one Global Instant — ADR-0001) and re-arms observation so it
+    /// follows ticks, scrubbing, and the Settings picker. Icon-only default.
+    private func updateMenuBarTitle() {
+        withObservationTracking { [weak self] in
+            guard let self, let button = statusItem.button else { return }
+            let engine = panelController.engine
+            let title: String
+            if let id = settings.menuBarLocationID,
+               let location = panelController.store.locations.first(where: { $0.id == id }) {
+                let localTime = LocalTime(of: engine.globalInstant, in: location.timeZone)
+                title = " " + TimeFormatting.timeString(localTime, clockFormat: settings.resolvedClockFormat)
+            } else {
+                title = ""
+            }
+            if button.title != title {
+                statusItem.length = title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
+                button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+                button.title = title
+            }
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.updateMenuBarTitle() }
         }
     }
 
@@ -77,7 +104,9 @@ final class StatusItemController: NSObject {
             )
             window.title = "WorldClock Settings"
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
+            window.contentViewController = NSHostingController(
+                rootView: SettingsView(settings: settings, store: panelController.store)
+            )
             settingsWindow = window
         }
         settingsWindow?.center()

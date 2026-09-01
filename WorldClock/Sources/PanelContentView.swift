@@ -56,7 +56,7 @@ struct PanelContentView: View {
                     .font(.caption.weight(.semibold))
                 Spacer()
                 Button("Now") {
-                    withAnimation(.spring(duration: 0.4)) { engine.returnToNow() }
+                    withAnimation(settings.animation(.spring(duration: 0.4))) { engine.returnToNow() }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -137,7 +137,7 @@ struct PanelContentView: View {
                             // Crossfade + animated width whenever the caption
                             // swaps (hover greeting, click reveal, U toggle).
                             .contentTransition(.opacity)
-                            .animation(.easeInOut(duration: 0.2), value: caption)
+                            .animation(settings.animation(.easeInOut(duration: 0.2)), value: caption)
                     }
                     .buttonStyle(.plain)
                 }
@@ -161,10 +161,11 @@ struct PanelContentView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .animation(.easeInOut(duration: 0.15), value: dateLabel)
+                .animation(settings.animation(.easeInOut(duration: 0.15)), value: dateLabel)
             }
             DayLineView(
                 dayLine: DayLineModel.dayLine(for: location, at: instant),
+                showsMoonPhase: settings.showMoonPhase,
                 onScrub: { raw, velocity in
                     // The anchor day freezes at drag start so fractions past
                     // the edge extrapolate stably (see TimeEngine.scrub).
@@ -261,12 +262,12 @@ struct PanelContentView: View {
     }
 
     private func revealBothOffsets(for id: Location.ID) {
-        withAnimation(.easeInOut(duration: 0.15)) { revealedOffsetID = id }
+        withAnimation(settings.animation(.easeInOut(duration: 0.15))) { revealedOffsetID = id }
         revealResetTask?.cancel()
         revealResetTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled, revealedOffsetID == id else { return }
-            withAnimation(.easeInOut(duration: 0.15)) { revealedOffsetID = nil }
+            withAnimation(settings.animation(.easeInOut(duration: 0.15))) { revealedOffsetID = nil }
         }
     }
 

@@ -158,6 +158,67 @@ struct LocationsStoreTests {
         #expect(store.home != nil)
     }
 
+    @Test("Import replaces the whole list and persists; reset reseeds")
+    @MainActor
+    func replaceAllAndReset() {
+        let directory = makeTempDirectory()
+        let store = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+
+        let imported = [
+            Location(
+                cityName: "Kathmandu", timeZone: TimeZone(identifier: "Asia/Kathmandu")!,
+                latitude: 27.7017, longitude: 85.3206, country: "NP"
+            ),
+            Location(
+                cityName: "Sydney", timeZone: TimeZone(identifier: "Australia/Sydney")!,
+                latitude: -33.8679, longitude: 151.2073, country: "AU"
+            ),
+        ]
+        store.replaceAll(with: imported)
+        #expect(store.locations == imported)
+
+        let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
+        #expect(relaunched.locations == imported)
+
+        relaunched.resetToSeed()
+        #expect(relaunched.locations.map(\.cityName) == ["Berlin", "London", "New York", "Tokyo"])
+    }
+
+    @Test("Export → wipe → import restores Locations and preferences exactly")
+    @MainActor
+    func configurationRoundTrip() throws {
+        let settings = SettingsStore(defaults: {
+            let name = "ConfigTests-\(UUID().uuidString)"
+            return UserDefaults(suiteName: name)!
+        }())
+        settings.offsetMode = .utc
+        settings.showWeather = false
+        let store = makeStore(directory: makeTempDirectory(), systemTimeZone: "Europe/Berlin")
+        store.add(
+            Location(
+                cityName: "Kathmandu", timeZone: TimeZone(identifier: "Asia/Kathmandu")!,
+                latitude: 27.7017, longitude: 85.3206, country: "NP"
+            )
+        )
+
+        let exported = try ConfigurationFile(locations: store.locations, settings: settings.snapshot).encoded()
+
+        // Wipe: brand-new stores in fresh storage.
+        let wipedStore = makeStore(directory: makeTempDirectory(), systemTimeZone: "Asia/Tokyo")
+        let wipedSettings = SettingsStore(defaults: {
+            let name = "ConfigTests-\(UUID().uuidString)"
+            return UserDefaults(suiteName: name)!
+        }())
+        #expect(wipedStore.locations != store.locations)
+
+        let imported = try ConfigurationFile(decoding: exported)
+        wipedStore.replaceAll(with: imported.locations)
+        wipedSettings.restore(imported.settings)
+
+        #expect(wipedStore.locations == store.locations)
+        #expect(wipedSettings.snapshot == settings.snapshot)
+    }
+
     @Test(
         "A corrupt file recovers to seeded defaults",
         arguments: [

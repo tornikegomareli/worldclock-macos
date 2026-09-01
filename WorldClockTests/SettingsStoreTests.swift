@@ -35,6 +35,42 @@ struct SettingsStoreTests {
         #expect(relaunched.clockFormatPreference == .twelveHour)
     }
 
+    @Test("All preferences persist and snapshot/restore round-trips them exactly")
+    @MainActor
+    func snapshotRestoreRoundTrip() {
+        let defaults = makeDefaults()
+        let settings = SettingsStore(defaults: defaults)
+        settings.offsetMode = .utc
+        settings.clockFormatPreference = .twentyFourHour
+        settings.showWeather = false
+        settings.showGreetings = false
+        settings.showMoonPhase = false
+        settings.animationsEnabled = false
+        settings.firstDayOfWeek = .monday
+        settings.autoUpdateHome = true
+        settings.menuBarLocationID = "Asia/Tokyo"
+
+        let snapshot = settings.snapshot
+
+        // Wipe: a fresh suite starts from defaults…
+        let restored = SettingsStore(defaults: makeDefaults())
+        #expect(restored.offsetMode == .relative)
+        #expect(restored.showMoonPhase)
+
+        // …and restoring the snapshot brings every preference back.
+        restored.restore(snapshot)
+        #expect(restored.offsetMode == .utc)
+        #expect(restored.clockFormatPreference == .twentyFourHour)
+        #expect(!restored.showWeather)
+        #expect(!restored.showGreetings)
+        #expect(!restored.showMoonPhase)
+        #expect(!restored.animationsEnabled)
+        #expect(restored.firstDayOfWeek == .monday)
+        #expect(restored.autoUpdateHome)
+        #expect(restored.menuBarLocationID == "Asia/Tokyo")
+        #expect(restored.snapshot == snapshot)
+    }
+
     @Test("The clock format preference resolves overrides, pinned locale otherwise")
     @MainActor
     func clockFormatResolution() {

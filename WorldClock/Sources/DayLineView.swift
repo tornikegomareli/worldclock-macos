@@ -5,6 +5,8 @@ import SwiftUI
 /// emoji.
 struct DayLineView: View {
     let dayLine: DayLine
+    /// When off, night shows a plain disc instead of the phase-correct moon.
+    var showsMoonPhase: Bool = true
     /// Called with the drag's day fraction and pointer velocity (pt/s) while
     /// scrubbing; the fraction may run past [0, 1] when the drag leaves the bar.
     var onScrub: ((Double, CGFloat) -> Void)?
@@ -76,8 +78,14 @@ struct DayLineView: View {
             ZStack {
                 Circle()
                     .fill(Color(red: 0.16, green: 0.18, blue: 0.30))
-                MoonShape(phase: phase)
-                    .fill(Color(red: 0.92, green: 0.93, blue: 0.98))
+                if showsMoonPhase {
+                    MoonShape(phase: phase)
+                        .fill(Color(red: 0.92, green: 0.93, blue: 0.98))
+                } else {
+                    Circle()
+                        .fill(Color(red: 0.55, green: 0.58, blue: 0.72))
+                        .padding(2)
+                }
             }
             .overlay(Circle().stroke(Color.white.opacity(0.5), lineWidth: 1))
             .shadow(color: .black.opacity(0.4), radius: 2)
