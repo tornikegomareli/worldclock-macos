@@ -124,12 +124,17 @@ struct PanelContentView: View {
                         .background(HiddenListScrollers())
                     // A Button, not a tap gesture: the List's row selection
                     // swallows plain gestures on row content.
+                    let caption = offsetCaption(for: location, isHome: isHome, relativeOffset: offset, at: instant)
                     Button {
                         revealBothOffsets(for: location.id)
                     } label: {
-                        Text(offsetCaption(for: location, isHome: isHome, relativeOffset: offset, at: instant))
+                        Text(caption)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            // Crossfade + animated width whenever the caption
+                            // swaps (hover greeting, click reveal, U toggle).
+                            .contentTransition(.opacity)
+                            .animation(.easeInOut(duration: 0.2), value: caption)
                     }
                     .buttonStyle(.plain)
                 }
