@@ -21,6 +21,8 @@ struct SettingsView: View {
                 Text("24-hour").tag(ClockFormatPreference.twentyFourHour)
             }
             .pickerStyle(.radioGroup)
+
+            Toggle("Show weather", isOn: $settings.showWeather)
         }
         .padding(20)
         .frame(width: 340)

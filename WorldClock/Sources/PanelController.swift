@@ -30,6 +30,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let databaseLoader = CityDatabaseLoader()
     private let keyRouter = PanelKeyRouter()
     private let settings: SettingsStore
+    private let weatherStore = WeatherStore(provider: WeatherKitProvider())
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -52,7 +53,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = NSHostingController(
             rootView: PanelContentView(
                 engine: engine, store: store, state: state,
-                databaseLoader: databaseLoader, settings: settings
+                databaseLoader: databaseLoader, settings: settings,
+                weatherStore: weatherStore
             )
         )
         registerKeys()
@@ -172,6 +174,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         )
         panel.setFrame(frame, display: false)
         panel.makeKeyAndOrderFront(nil)
+        if settings.showWeather {
+            // Fire-and-forget: weather never blocks or delays time rendering.
+            let locations = store.locations
+            Task { await weatherStore.refresh(locations) }
+        }
     }
 
     func windowDidResignKey(_ notification: Notification) {

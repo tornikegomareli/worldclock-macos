@@ -11,6 +11,7 @@ struct PanelContentView: View {
     @Bindable var state: PanelState
     let databaseLoader: CityDatabaseLoader
     let settings: SettingsStore
+    let weatherStore: WeatherStore
 
     /// The drag in progress: its frozen anchor day plus the raw/effective
     /// fraction accumulator that implements Shift precision.
@@ -130,8 +131,18 @@ struct PanelContentView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
-                        .font(.title3.monospacedDigit())
+                    HStack(spacing: 6) {
+                        if settings.showWeather, let weather = weatherStore.weather(for: location) {
+                            HStack(spacing: 3) {
+                                Image(systemName: weather.condition.symbolName)
+                                Text(weather.temperatureText(usesMetric: settings.usesMetricUnits))
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
+                            .font(.title3.monospacedDigit())
+                    }
                     if let dateLabel {
                         Text(dateLabel)
                             .font(.caption2)

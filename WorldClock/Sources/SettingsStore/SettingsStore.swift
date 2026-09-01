@@ -22,6 +22,7 @@ final class SettingsStore {
     private enum Keys {
         static let offsetMode = "offsetMode"
         static let clockFormat = "clockFormatPreference"
+        static let showWeather = "showWeather"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -33,6 +34,15 @@ final class SettingsStore {
 
     var clockFormatPreference: ClockFormatPreference {
         didSet { defaults.set(clockFormatPreference.rawValue, forKey: Keys.clockFormat) }
+    }
+
+    var showWeather: Bool {
+        didSet { defaults.set(showWeather, forKey: Keys.showWeather) }
+    }
+
+    /// Whether temperatures render in Celsius, from the injected locale.
+    var usesMetricUnits: Bool {
+        locale.measurementSystem == .metric
     }
 
     var resolvedClockFormat: ClockFormat {
@@ -50,5 +60,6 @@ final class SettingsStore {
             .flatMap(OffsetMode.init(rawValue:)) ?? .relative
         clockFormatPreference = defaults.string(forKey: Keys.clockFormat)
             .flatMap(ClockFormatPreference.init(rawValue:)) ?? .system
+        showWeather = defaults.object(forKey: Keys.showWeather) as? Bool ?? true
     }
 }
