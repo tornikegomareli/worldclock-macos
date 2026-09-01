@@ -1,0 +1,121 @@
+{
+  "countries": {
+    "US": "en", "GB": "en", "AU": "en", "CA": "en", "IE": "en", "NZ": "en",
+    "JP": "ja",
+    "GE": "ka",
+    "ES": "es", "MX": "es", "AR": "es", "CO": "es", "CL": "es", "PE": "es",
+    "FR": "fr", "BE": "fr",
+    "DE": "de", "AT": "de", "CH": "de",
+    "IT": "it",
+    "PT": "pt", "BR": "pt",
+    "RU": "ru",
+    "CN": "zh", "TW": "zh", "HK": "zh", "SG": "zh",
+    "KR": "ko",
+    "SA": "ar", "AE": "ar", "EG": "ar", "QA": "ar", "KW": "ar",
+    "IN": "hi",
+    "TR": "tr",
+    "NL": "nl",
+    "PL": "pl",
+    "SE": "sv",
+    "GR": "el",
+    "TH": "th",
+    "UA": "uk"
+  },
+  "rules": {
+    "en": [
+      { "from": "05:00", "greeting": "Good morning", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "Good afternoon", "gloss": "Good afternoon" },
+      { "from": "18:00", "greeting": "Good evening", "gloss": "Good evening" }
+    ],
+    "ja": [
+      { "from": "04:00", "greeting": "おはようございます", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "こんにちは", "gloss": "Good afternoon" },
+      { "from": "18:00", "greeting": "こんばんは", "gloss": "Good evening" }
+    ],
+    "ka": [
+      { "from": "05:00", "greeting": "დილა მშვიდობისა", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "შუადღე მშვიდობისა", "gloss": "Good afternoon" },
+      { "from": "18:00", "greeting": "საღამო მშვიდობისა", "gloss": "Good evening" }
+    ],
+    "es": [
+      { "from": "06:00", "greeting": "Buenos días", "gloss": "Good morning" },
+      { "from": "13:00", "greeting": "Buenas tardes", "gloss": "Good afternoon" },
+      { "from": "20:30", "greeting": "Buenas noches", "gloss": "Good evening" }
+    ],
+    "fr": [
+      { "from": "06:00", "greeting": "Bonjour", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "Bonsoir", "gloss": "Good evening" }
+    ],
+    "de": [
+      { "from": "05:00", "greeting": "Guten Morgen", "gloss": "Good morning" },
+      { "from": "10:30", "greeting": "Guten Tag", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "Guten Abend", "gloss": "Good evening" }
+    ],
+    "it": [
+      { "from": "06:00", "greeting": "Buongiorno", "gloss": "Good morning" },
+      { "from": "15:00", "greeting": "Buonasera", "gloss": "Good evening" }
+    ],
+    "pt": [
+      { "from": "06:00", "greeting": "Bom dia", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "Boa tarde", "gloss": "Good afternoon" },
+      { "from": "19:00", "greeting": "Boa noite", "gloss": "Good evening" }
+    ],
+    "ru": [
+      { "from": "05:00", "greeting": "Доброе утро", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "Добрый день", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "Добрый вечер", "gloss": "Good evening" }
+    ],
+    "zh": [
+      { "from": "05:00", "greeting": "早上好", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "下午好", "gloss": "Good afternoon" },
+      { "from": "18:00", "greeting": "晚上好", "gloss": "Good evening" }
+    ],
+    "ko": [
+      { "from": "05:00", "greeting": "좋은 아침이에요", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "안녕하세요", "gloss": "Hello" },
+      { "from": "18:00", "greeting": "좋은 저녁 되세요", "gloss": "Good evening" }
+    ],
+    "ar": [
+      { "from": "05:00", "greeting": "صباح الخير", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "مساء الخير", "gloss": "Good evening" }
+    ],
+    "hi": [
+      { "from": "05:00", "greeting": "सुप्रभात", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "नमस्ते", "gloss": "Hello" },
+      { "from": "18:00", "greeting": "शुभ संध्या", "gloss": "Good evening" }
+    ],
+    "tr": [
+      { "from": "05:00", "greeting": "Günaydın", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "İyi günler", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "İyi akşamlar", "gloss": "Good evening" }
+    ],
+    "nl": [
+      { "from": "06:00", "greeting": "Goedemorgen", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "Goedemiddag", "gloss": "Good afternoon" },
+      { "from": "18:00", "greeting": "Goedenavond", "gloss": "Good evening" }
+    ],
+    "pl": [
+      { "from": "06:00", "greeting": "Dzień dobry", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "Dobry wieczór", "gloss": "Good evening" }
+    ],
+    "sv": [
+      { "from": "05:00", "greeting": "God morgon", "gloss": "Good morning" },
+      { "from": "10:00", "greeting": "God dag", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "God kväll", "gloss": "Good evening" }
+    ],
+    "el": [
+      { "from": "05:00", "greeting": "Καλημέρα", "gloss": "Good morning" },
+      { "from": "17:00", "greeting": "Καλησπέρα", "gloss": "Good evening" }
+    ],
+    "th": [
+      { "from": "05:00", "greeting": "สวัสดีตอนเช้า", "gloss": "Good morning" },
+      { "from": "12:00", "greeting": "สวัสดีตอนบ่าย", "gloss": "Good afternoon" },
+      { "from": "17:00", "greeting": "สวัสดีตอนเย็น", "gloss": "Good evening" }
+    ],
+    "uk": [
+      { "from": "05:00", "greeting": "Доброго ранку", "gloss": "Good morning" },
+      { "from": "11:00", "greeting": "Добрий день", "gloss": "Good day" },
+      { "from": "18:00", "greeting": "Добрий вечір", "gloss": "Good evening" }
+    ]
+  }
+}

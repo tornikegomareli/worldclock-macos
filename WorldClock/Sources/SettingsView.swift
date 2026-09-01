@@ -23,6 +23,7 @@ struct SettingsView: View {
             .pickerStyle(.radioGroup)
 
             Toggle("Show weather", isOn: $settings.showWeather)
+            Toggle("Show greetings", isOn: $settings.showGreetings)
         }
         .padding(20)
         .frame(width: 340)

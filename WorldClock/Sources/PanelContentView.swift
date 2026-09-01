@@ -12,6 +12,7 @@ struct PanelContentView: View {
     let databaseLoader: CityDatabaseLoader
     let settings: SettingsStore
     let weatherStore: WeatherStore
+    let greetingProvider: GreetingProvider?
 
     /// The drag in progress: its frozen anchor day plus the raw/effective
     /// fraction accumulator that implements Shift precision.
@@ -21,6 +22,9 @@ struct PanelContentView: View {
     /// interpretations after a click.
     @State private var revealedOffsetID: Location.ID?
     @State private var revealResetTask: Task<Void, Never>?
+
+    /// The Location under the pointer; its secondary info shows the Greeting.
+    @State private var hoveredLocationID: Location.ID?
 
     private var clockFormat: ClockFormat { settings.resolvedClockFormat }
 
@@ -185,6 +189,13 @@ struct PanelContentView: View {
             }
         }
         .padding(.vertical, 4)
+        .onHover { hovering in
+            if hovering {
+                hoveredLocationID = location.id
+            } else if hoveredLocationID == location.id {
+                hoveredLocationID = nil
+            }
+        }
     }
 
     /// Secondary info revealed by Return on the selected Location.
@@ -217,12 +228,22 @@ struct PanelContentView: View {
         .transition(.opacity)
     }
 
-    /// Relative Mode or UTC Mode caption; a click transiently shows both.
+    /// Relative Mode or UTC Mode caption; a click transiently shows both, and
+    /// hovering swaps in the Greeting for the simulated Local Time.
     private func offsetCaption(for location: Location, isHome: Bool, relativeOffset: RelativeOffset, at instant: Date) -> String {
         let relativeText = isHome ? "Home" : TimeFormatting.relativeOffset(seconds: relativeOffset.seconds)
         let utcText = TimeFormatting.utcOffset(seconds: location.timeZone.secondsFromGMT(for: instant))
         if revealedOffsetID == location.id {
             return "\(relativeText) · \(utcText)"
+        }
+        if hoveredLocationID == location.id,
+           settings.showGreetings,
+           let country = location.country,
+           let greeting = greetingProvider?.greeting(
+               countryCode: country,
+               at: LocalTime(of: instant, in: location.timeZone)
+           ) {
+            return "\(greeting.text) · \(greeting.gloss)"
         }
         if settings.offsetMode == .relative {
             return relativeText
@@ -335,7 +356,8 @@ struct PanelContentView: View {
                         cityName: city.name,
                         timeZone: zone,
                         latitude: city.latitude,
-                        longitude: city.longitude
+                        longitude: city.longitude,
+                        country: city.country
                     )
                 )
             }

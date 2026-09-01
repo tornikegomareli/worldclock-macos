@@ -52,18 +52,20 @@ final class LocationsStore {
         locations.move(fromOffsets: source, toOffset: destination)
     }
 
-    /// Fills in coordinates for Locations that lack them (e.g. Home seeded
-    /// from just a timezone), using a resolver such as a City database lookup.
-    func backfillCoordinates(_ resolve: (Location) -> (latitude: Double, longitude: Double)?) {
+    /// Fills in coordinates and country for Locations that lack them (e.g.
+    /// Home seeded from just a timezone), using a resolver such as a City
+    /// database lookup.
+    func backfillCityDetails(_ resolve: (Location) -> (latitude: Double, longitude: Double, country: String)?) {
         let filled = locations.map { location -> Location in
-            guard location.latitude == nil || location.longitude == nil,
-                  let coordinate = resolve(location)
+            guard location.latitude == nil || location.longitude == nil || location.country == nil,
+                  let details = resolve(location)
             else { return location }
             return Location(
                 cityName: location.cityName,
                 timeZone: location.timeZone,
-                latitude: coordinate.latitude,
-                longitude: coordinate.longitude
+                latitude: location.latitude ?? details.latitude,
+                longitude: location.longitude ?? details.longitude,
+                country: location.country ?? details.country
             )
         }
         if filled != locations {
@@ -92,15 +94,15 @@ final class LocationsStore {
         let others: [Location] = [
             Location(
                 cityName: "London", timeZone: TimeZone(identifier: "Europe/London")!,
-                latitude: 51.5074, longitude: -0.1278
+                latitude: 51.5074, longitude: -0.1278, country: "GB"
             ),
             Location(
                 cityName: "New York", timeZone: TimeZone(identifier: "America/New_York")!,
-                latitude: 40.7128, longitude: -74.006
+                latitude: 40.7128, longitude: -74.006, country: "US"
             ),
             Location(
                 cityName: "Tokyo", timeZone: TimeZone(identifier: "Asia/Tokyo")!,
-                latitude: 35.6895, longitude: 139.6917
+                latitude: 35.6895, longitude: 139.6917, country: "JP"
             ),
         ]
         return [home] + others.filter { $0.id != home.id }

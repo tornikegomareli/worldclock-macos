@@ -31,6 +31,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let keyRouter = PanelKeyRouter()
     private let settings: SettingsStore
     private let weatherStore = WeatherStore(provider: WeatherKitProvider())
+    private let greetingProvider = try? GreetingProvider.loadBundled()
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -54,7 +55,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             rootView: PanelContentView(
                 engine: engine, store: store, state: state,
                 databaseLoader: databaseLoader, settings: settings,
-                weatherStore: weatherStore
+                weatherStore: weatherStore, greetingProvider: greetingProvider
             )
         )
         registerKeys()
@@ -63,10 +64,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             guard let self else { return }
             // Give timezone-only Locations (like the seeded Home) real
             // coordinates so their Day Lines stop degrading to the equator.
-            store.backfillCoordinates { location in
+            store.backfillCityDetails { location in
                 database.search(location.cityName, at: engine.globalInstant)
                     .first { $0.timeZone == location.timeZone.identifier }
-                    .map { (latitude: $0.latitude, longitude: $0.longitude) }
+                    .map { (latitude: $0.latitude, longitude: $0.longitude, country: $0.country) }
             }
         }
     }

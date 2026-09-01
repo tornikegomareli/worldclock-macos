@@ -46,6 +46,30 @@ The script downloads the current GeoNames snapshot when run (the dump is not
 versioned upstream, so the committed index is the reproducibility anchor).
 The app itself never touches the network.
 
+## Greetings
+
+Hovering a Location shows a local-language greeting for its (possibly
+simulated) Local Time. Greetings are per-locale rules — locales divide the day
+differently — bundled at `WorldClock/Resources/greetings.json`:
+
+```json
+{
+  "countries": { "JP": "ja" },
+  "rules": {
+    "ja": [
+      { "from": "04:00", "greeting": "おはようございます", "gloss": "Good morning" }
+    ]
+  }
+}
+```
+
+To contribute a locale: map its ISO country codes to a language key under
+`countries`, then add that language's day periods under `rules`. Each rule
+starts at `from` (24h local time) and runs until the next rule; the last rule
+wraps across midnight. `gloss` is the English gloss shown next to the
+greeting. Pick boundaries that match how the locale actually divides the day,
+not a translation of another locale's schedule.
+
 ## Attribution
 
 City data: [GeoNames](https://www.geonames.org), licensed under

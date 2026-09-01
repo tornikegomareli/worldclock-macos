@@ -9,12 +9,22 @@ struct Location: Identifiable, Equatable {
     let timeZone: TimeZone
     let latitude: Double?
     let longitude: Double?
+    /// ISO country code from the City, for locale-dependent enrichment
+    /// like Greetings.
+    let country: String?
 
-    init(cityName: String, timeZone: TimeZone, latitude: Double? = nil, longitude: Double? = nil) {
+    init(
+        cityName: String,
+        timeZone: TimeZone,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        country: String? = nil
+    ) {
         self.cityName = cityName
         self.timeZone = timeZone
         self.latitude = latitude
         self.longitude = longitude
+        self.country = country
     }
 
     var id: String { timeZone.identifier }
@@ -28,6 +38,7 @@ extension Location: Codable {
         case timeZoneIdentifier
         case latitude
         case longitude
+        case country
     }
 
     init(from decoder: any Decoder) throws {
@@ -44,6 +55,7 @@ extension Location: Codable {
         self.timeZone = timeZone
         latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        country = try container.decodeIfPresent(String.self, forKey: .country)
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -52,5 +64,6 @@ extension Location: Codable {
         try container.encode(timeZone.identifier, forKey: .timeZoneIdentifier)
         try container.encodeIfPresent(latitude, forKey: .latitude)
         try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(country, forKey: .country)
     }
 }

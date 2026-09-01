@@ -100,24 +100,29 @@ struct LocationsStoreTests {
         #expect(relaunched.home?.timeZone.identifier == "Asia/Tokyo")
     }
 
-    @Test("Backfilling fills only missing coordinates and persists them")
+    @Test("Backfilling fills missing coordinates and country, and persists them")
     @MainActor
-    func backfillCoordinates() {
+    func backfillCityDetails() {
         let directory = makeTempDirectory()
         let store = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
         #expect(store.home?.latitude == nil)
+        #expect(store.home?.country == nil)
 
-        store.backfillCoordinates { location in
-            location.cityName == "Berlin" ? (latitude: 52.5200, longitude: 13.4050) : nil
+        store.backfillCityDetails { location in
+            location.cityName == "Berlin"
+                ? (latitude: 52.5200, longitude: 13.4050, country: "DE") : nil
         }
 
         #expect(store.home?.latitude == 52.5200)
         #expect(store.home?.longitude == 13.4050)
-        // London's seeded coordinate is untouched.
+        #expect(store.home?.country == "DE")
+        // London's seeded values are untouched.
         #expect(store.locations[1].latitude == 51.5074)
+        #expect(store.locations[1].country == "GB")
 
         let relaunched = makeStore(directory: directory, systemTimeZone: "Europe/Berlin")
         #expect(relaunched.home?.latitude == 52.5200)
+        #expect(relaunched.home?.country == "DE")
     }
 
     @Test("Adding a Location in a timezone already in the list is refused")
