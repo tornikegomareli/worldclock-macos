@@ -1,3 +1,4 @@
+import AppKit
 import Metal
 import RealityKit
 import SwiftUI
@@ -37,7 +38,16 @@ struct GlobeSpikeView: View {
                         setupError = "\(error)"
                     }
                 }
-                .realityViewCameraControls(.orbit)
+                // Hand-rolled orbit + zoom: RealityKit's built-in .orbit
+                // controls have fixed sensitivity and no scroll zoom on
+                // macOS (spike finding).
+                .gesture(
+                    DragGesture(minimumDistance: 2)
+                        .onChanged { value in
+                            scene.orbit(by: value.translation)
+                        }
+                        .onEnded { _ in scene.endOrbit() }
+                )
                 .onTapGesture { point in
                     if let coordinate = scene.pick(at: point) {
                         pickReadout = String(
@@ -45,6 +55,7 @@ struct GlobeSpikeView: View {
                         )
                     }
                 }
+                .onAppear { scene.installScrollZoomMonitor() }
                 if let setupError {
                     Text(setupError)
                         .foregroundStyle(.red)
@@ -98,7 +109,15 @@ final class GlobeScene {
     private var globe: ModelEntity?
     private var material: CustomMaterial?
     private var content: RealityViewCameraContent?
+    private var camera: PerspectiveCamera?
     private(set) var lastUpdateMilliseconds = 0.0
+
+    // Orbit state: spherical camera coordinates plus the drag's start angles.
+    private var yaw = 0.0
+    private var pitch = 0.0
+    private var distance = 3.0
+    private var dragStart: (yaw: Double, pitch: Double)?
+    private var scrollMonitor: Any?
 
     struct Coordinate {
         let latitude: Double
@@ -122,12 +141,52 @@ final class GlobeScene {
         content.add(globe)
 
         let camera = PerspectiveCamera()
-        camera.position = [0, 0, 3]
         content.add(camera)
 
         self.globe = globe
         self.material = material
         self.content = content
+        self.camera = camera
+        positionCamera()
+    }
+
+    // MARK: Camera
+
+    /// Direct-manipulation orbit: one point of drag ≈ a third of a degree,
+    /// pitch clamped short of the poles.
+    func orbit(by translation: CGSize) {
+        let start = dragStart ?? (yaw, pitch)
+        dragStart = start
+        yaw = start.yaw - Double(translation.width) * 0.006
+        pitch = min(max(start.pitch + Double(translation.height) * 0.006, -1.45), 1.45)
+        positionCamera()
+    }
+
+    func endOrbit() {
+        dragStart = nil
+    }
+
+    /// Scroll wheel / trackpad scroll zooms; pinch comes through as scroll
+    /// with the magnify phase on most trackpads.
+    func installScrollZoomMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            MainActor.assumeIsolated {
+                self.distance = min(max(self.distance * (1 - event.scrollingDeltaY * 0.005), 1.3), 8)
+                self.positionCamera()
+            }
+            return event
+        }
+    }
+
+    private func positionCamera() {
+        guard let camera else { return }
+        let x = Float(distance * cos(pitch) * sin(yaw))
+        let y = Float(distance * sin(pitch))
+        let z = Float(distance * cos(pitch) * cos(yaw))
+        camera.position = [x, y, z]
+        camera.look(at: .zero, from: camera.position, relativeTo: nil)
     }
 
     /// Sun direction from the subsolar point. Empirical finding for #14: the
