@@ -21,6 +21,7 @@ final class StatusItemController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         panelController = PanelController(settings: settings)
         super.init()
+        panelController.openSettingsHandler = { [weak self] in self?.openSettings() }
         if let button = statusItem.button {
             button.image = Self.makeTiltedEarthIcon()
             button.target = self

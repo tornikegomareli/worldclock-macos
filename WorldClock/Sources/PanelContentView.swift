@@ -13,6 +13,7 @@ struct PanelContentView: View {
     let settings: SettingsStore
     let weatherStore: WeatherStore
     let greetingProvider: GreetingProvider?
+    let onCommand: (PanelCommand) -> Void
 
     /// The drag in progress: its frozen anchor day plus the raw/effective
     /// fraction accumulator that implements Shift precision.
@@ -32,6 +33,8 @@ struct PanelContentView: View {
         VStack(spacing: 0) {
             if state.isSearching {
                 searchOverlay
+            } else if state.isCommandSearching {
+                commandOverlay
             } else {
                 timeStateHeader
                 locationList
@@ -282,6 +285,100 @@ struct PanelContentView: View {
         .padding(.vertical, 10)
     }
 
+    // MARK: ⌘K command overlay
+
+    private var commandResults: [PanelCommand] {
+        CommandMatcher.commands(
+            matching: state.commandQuery,
+            locations: store.locations,
+            offsetMode: settings.offsetMode,
+            timeState: engine.state,
+            cityDatabase: databaseLoader.database,
+            at: engine.globalInstant
+        )
+    }
+
+    /// Index of the highlighted command; ↑/↓ move it, Return executes it.
+    @State private var commandSelection = 0
+
+    private var commandOverlay: some View {
+        let results = commandResults
+        let highlighted = min(commandSelection, max(results.count - 1, 0))
+        return overlayShell(
+            placeholder: "Type a command…",
+            query: $state.commandQuery,
+            onSubmit: {
+                if results.indices.contains(highlighted) { onCommand(results[highlighted]) }
+            },
+            onMoveUp: { commandSelection = max(highlighted - 1, 0) },
+            onMoveDown: { commandSelection = min(highlighted + 1, max(results.count - 1, 0)) },
+            emptyText: "No matching commands",
+            isEmpty: results.isEmpty
+        ) {
+            ForEach(Array(results.enumerated()), id: \.element) { index, command in
+                HStack {
+                    Text(command.title)
+                        .font(.body)
+                        .background(HiddenListScrollers())
+                    Spacer()
+                    if let shortcut = command.shortcutLabel {
+                        Text(shortcut)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { onCommand(command) }
+                .listRowBackground(
+                    index == highlighted
+                        ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.25))
+                        : nil
+                )
+            }
+        }
+        .onChange(of: state.commandQuery) { commandSelection = 0 }
+    }
+
+    /// The scaffold both overlays share: focused field, divider, list, empty state.
+    private func overlayShell<Rows: View>(
+        placeholder: String,
+        query: Binding<String>,
+        onSubmit: @escaping () -> Void,
+        onMoveUp: (() -> Void)? = nil,
+        onMoveDown: (() -> Void)? = nil,
+        emptyText: String,
+        isEmpty: Bool,
+        @ViewBuilder rows: () -> Rows
+    ) -> some View {
+        VStack(spacing: 0) {
+            FocusedTextField(
+                placeholder: placeholder,
+                text: query,
+                onSubmit: onSubmit,
+                onCancel: { state.dismissOverlays() },
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .padding(12)
+            Divider()
+            List {
+                rows()
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .overlay {
+                if isEmpty {
+                    Text(emptyText)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     // MARK: City search overlay
 
     private var searchResults: [City] {
@@ -290,29 +387,19 @@ struct PanelContentView: View {
     }
 
     private var searchOverlay: some View {
-        VStack(spacing: 0) {
-            FocusedTextField(
-                placeholder: "City, airport code, or UTC offset",
-                text: $state.searchQuery,
-                onSubmit: {
-                    if let first = searchResults.first { add(first) }
-                },
-                onCancel: { state.cancelSearch() }
-            )
-            .padding(12)
-            Divider()
-            List(searchResults) { city in
+        overlayShell(
+            placeholder: "City, airport code, or UTC offset",
+            query: $state.searchQuery,
+            onSubmit: {
+                if let first = searchResults.first { onCommand(.addLocation(first)) }
+            },
+            emptyText: "Loading cities…",
+            isEmpty: databaseLoader.database == nil
+        ) {
+            ForEach(searchResults) { city in
                 cityRow(for: city)
                     .contentShape(Rectangle())
-                    .onTapGesture { add(city) }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .scrollIndicators(.hidden)
-            .overlay {
-                if databaseLoader.database == nil {
-                    Text("Loading cities…").foregroundStyle(.secondary)
-                }
+                    .onTapGesture { onCommand(.addLocation(city)) }
             }
         }
     }
@@ -348,24 +435,4 @@ struct PanelContentView: View {
         Locale.current.localizedString(forRegionCode: code)
     }
 
-    private func add(_ city: City) {
-        guard let zone = TimeZone(identifier: city.timeZone) else { return }
-        // Swap back to the list first, then insert on the next tick so the
-        // new Location visibly animates into the on-screen list.
-        state.cancelSearch()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
-            withAnimation(.spring(duration: 0.35)) {
-                store.add(
-                    Location(
-                        cityName: city.name,
-                        timeZone: zone,
-                        latitude: city.latitude,
-                        longitude: city.longitude,
-                        country: city.country
-                    )
-                )
-            }
-        }
-    }
 }

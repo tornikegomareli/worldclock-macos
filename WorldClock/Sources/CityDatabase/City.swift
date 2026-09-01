@@ -2,7 +2,7 @@ import Foundation
 
 /// An entry in the bundled offline city database (GeoNames cities15000):
 /// the sole timezone source for a Location.
-struct City: Codable, Equatable, Identifiable {
+struct City: Codable, Hashable, Identifiable {
     let name: String
     let asciiName: String
     let country: String

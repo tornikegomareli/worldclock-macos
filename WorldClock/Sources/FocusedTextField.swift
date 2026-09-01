@@ -10,6 +10,8 @@ struct FocusedTextField: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
     var onCancel: () -> Void
+    var onMoveUp: (() -> Void)?
+    var onMoveDown: (() -> Void)?
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
@@ -56,6 +58,12 @@ struct FocusedTextField: NSViewRepresentable {
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
                 parent.onCancel()
+                return true
+            case #selector(NSResponder.moveUp(_:)) where parent.onMoveUp != nil:
+                parent.onMoveUp?()
+                return true
+            case #selector(NSResponder.moveDown(_:)) where parent.onMoveDown != nil:
+                parent.onMoveDown?()
                 return true
             default:
                 return false

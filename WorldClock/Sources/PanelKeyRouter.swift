@@ -12,6 +12,7 @@ final class PanelKeyRouter {
         case upArrow
         case downArrow
         case character(Character)
+        case commandCharacter(Character)
 
         private static let escapeKeyCode: UInt16 = 53
         private static let deleteKeyCode: UInt16 = 51
@@ -28,12 +29,15 @@ final class PanelKeyRouter {
             case upArrowKeyCode: return .upArrow
             case downArrowKeyCode: return .downArrow
             default:
-                let hasModifiers = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
-                guard !hasModifiers,
-                      let characters = event.charactersIgnoringModifiers?.lowercased(),
+                guard let characters = event.charactersIgnoringModifiers?.lowercased(),
                       let character = characters.first,
                       characters.count == 1
                 else { return nil }
+                let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+                if modifiers == .command {
+                    return .commandCharacter(character)
+                }
+                guard modifiers.isEmpty else { return nil }
                 return .character(character)
             }
         }

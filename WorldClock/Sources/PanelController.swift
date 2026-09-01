@@ -11,10 +11,16 @@ final class PanelState {
     var inspectedLocationID: Location.ID?
     var isSearching = false
     var searchQuery = ""
+    var isCommandSearching = false
+    var commandQuery = ""
 
-    func cancelSearch() {
+    var isAnyOverlayOpen: Bool { isSearching || isCommandSearching }
+
+    func dismissOverlays() {
         isSearching = false
         searchQuery = ""
+        isCommandSearching = false
+        commandQuery = ""
     }
 }
 
@@ -32,6 +38,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let settings: SettingsStore
     private let weatherStore = WeatherStore(provider: WeatherKitProvider())
     private let greetingProvider = try? GreetingProvider.loadBundled()
+
+    /// Set by StatusItemController; ⌘K's Settings command opens its window.
+    var openSettingsHandler: (() -> Void)?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -55,7 +64,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             rootView: PanelContentView(
                 engine: engine, store: store, state: state,
                 databaseLoader: databaseLoader, settings: settings,
-                weatherStore: weatherStore, greetingProvider: greetingProvider
+                weatherStore: weatherStore, greetingProvider: greetingProvider,
+                onCommand: { [weak self] in self?.execute($0) }
             )
         )
         registerKeys()
@@ -83,6 +93,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         keyRouter.bind(.character("a")) { [weak self] in self?.state.isSearching = true }
         keyRouter.bind(.character("n")) { [weak self] in self?.returnToNowAnimated() }
         keyRouter.bind(.character("u")) { [weak self] in self?.toggleOffsetMode() }
+        keyRouter.bind(.commandCharacter("k")) { [weak self] in
+            self?.state.isCommandSearching = true
+        }
         panel.onKeyEvent = { [weak self] event in
             self?.keyRouter.handle(event) ?? false
         }
@@ -90,14 +103,14 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func performEscapeStep() {
         let step = PanelKeyLogic.escapeStep(
-            isSearching: state.isSearching,
+            isSearching: state.isAnyOverlayOpen,
             isInspecting: state.inspectedLocationID != nil,
             timeState: engine.state,
             hasSelection: state.selectedLocationID != nil
         )
         switch step {
         case .cancelSearch:
-            state.cancelSearch()
+            state.dismissOverlays()
         case .closeInspection:
             withAnimation(.easeInOut(duration: 0.15)) { state.inspectedLocationID = nil }
         case .returnToNow:
@@ -110,7 +123,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func moveSelection(_ direction: PanelKeyLogic.SelectionDirection) {
-        guard !state.isSearching else { return }
+        guard !state.isAnyOverlayOpen else { return }
         let moved = PanelKeyLogic.movedSelection(
             from: state.selectedLocationID,
             by: direction,
@@ -138,12 +151,63 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func removeSelectedLocation() {
         guard let id = state.selectedLocationID else { return }
-        let nextSelection = PanelKeyLogic.selectionAfterRemoval(of: id, from: store.locations)
+        remove(locationID: id)
+    }
+
+    private func remove(locationID id: Location.ID) {
+        let nextSelection = state.selectedLocationID == id
+            ? PanelKeyLogic.selectionAfterRemoval(of: id, from: store.locations)
+            : state.selectedLocationID
         store.remove(id: id)
         // The store refuses to remove the last Location; keep selection there.
-        state.selectedLocationID = store.locations.contains { $0.id == id } ? id : nextSelection
-        if state.inspectedLocationID == id {
+        state.selectedLocationID = store.locations.contains { $0.id == id }
+            ? state.selectedLocationID
+            : nextSelection
+        if state.inspectedLocationID == id, !store.locations.contains(where: { $0.id == id }) {
             setInspection(nil)
+        }
+    }
+
+    /// Swap back to the list first, then insert on the next tick so the new
+    /// Location visibly animates into the on-screen list.
+    private func addAnimated(_ city: City) {
+        guard let zone = TimeZone(identifier: city.timeZone) else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.spring(duration: 0.35)) {
+                store.add(
+                    Location(
+                        cityName: city.name, timeZone: zone,
+                        latitude: city.latitude, longitude: city.longitude,
+                        country: city.country
+                    )
+                )
+            }
+        }
+    }
+
+    /// Executes a ⌘K command and dismisses the overlay. Also the single add
+    /// path for the city-search overlay, so both surfaces animate identically.
+    func execute(_ command: PanelCommand) {
+        state.dismissOverlays()
+        switch command {
+        case let .addLocation(city):
+            addAnimated(city)
+        case let .showLocation(location):
+            state.selectedLocationID = location.id
+        case let .removeLocation(location):
+            remove(locationID: location.id)
+        case .openGlobe:
+            // Graceful no-op until the Globe ships (ADR-0002 track).
+            break
+        case .switchToUTCMode:
+            settings.offsetMode = .utc
+        case .switchToRelativeMode:
+            settings.offsetMode = .relative
+        case .returnToNow:
+            returnToNowAnimated()
+        case .openSettings:
+            openSettingsHandler?()
         }
     }
 

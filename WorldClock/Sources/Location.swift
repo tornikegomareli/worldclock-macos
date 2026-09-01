@@ -4,7 +4,7 @@ import Foundation
 /// the City database gives Locations a real City reference. Coordinates are
 /// optional: a Location seeded from just a timezone has none, and its Day
 /// Line degrades to an equatorial approximation.
-struct Location: Identifiable, Equatable {
+struct Location: Identifiable, Hashable {
     let cityName: String
     let timeZone: TimeZone
     let latitude: Double?
