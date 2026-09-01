@@ -2,12 +2,13 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// The Panel's UI state — selection and the search overlay — shared between
-/// the SwiftUI content and the window-level key handlers.
+/// The Panel's UI state — selection, inspection, and the search overlay —
+/// shared between the SwiftUI content and the window-level key handlers.
 @MainActor
 @Observable
 final class PanelState {
     var selectedLocationID: Location.ID?
+    var inspectedLocationID: Location.ID?
     var isSearching = false
     var searchQuery = ""
 
@@ -27,6 +28,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
     private let state = PanelState()
     private let databaseLoader = CityDatabaseLoader()
+    private let keyRouter = PanelKeyRouter()
 
     override init() {
         panel = FloatingPanel(
@@ -48,31 +50,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = NSHostingController(
             rootView: PanelContentView(engine: engine, store: store, state: state, databaseLoader: databaseLoader)
         )
-        panel.onDeleteKey = { [weak self] in
-            guard let self, let id = state.selectedLocationID else { return }
-            store.remove(id: id)
-            state.selectedLocationID = nil
-        }
-        panel.onEscape = { [weak self] in
-            guard let self else { return false }
-            if state.isSearching {
-                state.cancelSearch()
-                return true
-            }
-            // CONTEXT.md: Esc returns the Time State to Now; the panel closes
-            // only from Now mode.
-            if engine.state != .now {
-                returnToNowAnimated()
-                return true
-            }
-            return false
-        }
-        panel.onAddKey = { [weak self] in
-            self?.state.isSearching = true
-        }
-        panel.onNowKey = { [weak self] in
-            self?.returnToNowAnimated()
-        }
+        registerKeys()
         engine.startTicking()
         databaseLoader.load { [weak self] database in
             guard let self else { return }
@@ -83,6 +61,80 @@ final class PanelController: NSObject, NSWindowDelegate {
                     .first { $0.timeZone == location.timeZone.identifier }
                     .map { (latitude: $0.latitude, longitude: $0.longitude) }
             }
+        }
+    }
+
+    // MARK: Key routing — the one registration point for Panel shortcuts.
+
+    private func registerKeys() {
+        keyRouter.bind(.escape) { [weak self] in self?.performEscapeStep() }
+        keyRouter.bind(.upArrow) { [weak self] in self?.moveSelection(.up) }
+        keyRouter.bind(.downArrow) { [weak self] in self?.moveSelection(.down) }
+        keyRouter.bind(.returnKey) { [weak self] in self?.toggleInspection() }
+        keyRouter.bind(.delete) { [weak self] in self?.removeSelectedLocation() }
+        keyRouter.bind(.character("a")) { [weak self] in self?.state.isSearching = true }
+        keyRouter.bind(.character("n")) { [weak self] in self?.returnToNowAnimated() }
+        panel.onKeyEvent = { [weak self] event in
+            self?.keyRouter.handle(event) ?? false
+        }
+    }
+
+    private func performEscapeStep() {
+        let step = PanelKeyLogic.escapeStep(
+            isSearching: state.isSearching,
+            isInspecting: state.inspectedLocationID != nil,
+            timeState: engine.state,
+            hasSelection: state.selectedLocationID != nil
+        )
+        switch step {
+        case .cancelSearch:
+            state.cancelSearch()
+        case .closeInspection:
+            withAnimation(.easeInOut(duration: 0.15)) { state.inspectedLocationID = nil }
+        case .returnToNow:
+            returnToNowAnimated()
+        case .clearSelection:
+            state.selectedLocationID = nil
+        case .closePanel:
+            panel.close()
+        }
+    }
+
+    private func moveSelection(_ direction: PanelKeyLogic.SelectionDirection) {
+        guard !state.isSearching else { return }
+        let moved = PanelKeyLogic.movedSelection(
+            from: state.selectedLocationID,
+            by: direction,
+            in: store.locations
+        )
+        state.selectedLocationID = moved
+        // Inspection belongs to the selected Location; it never lingers on
+        // a row the selection has left.
+        if state.inspectedLocationID != moved {
+            setInspection(nil)
+        }
+    }
+
+    private func toggleInspection() {
+        guard let selected = state.selectedLocationID else { return }
+        setInspection(state.inspectedLocationID == selected ? nil : selected)
+    }
+
+    private func setInspection(_ id: Location.ID?) {
+        guard state.inspectedLocationID != id else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            state.inspectedLocationID = id
+        }
+    }
+
+    private func removeSelectedLocation() {
+        guard let id = state.selectedLocationID else { return }
+        let nextSelection = PanelKeyLogic.selectionAfterRemoval(of: id, from: store.locations)
+        store.remove(id: id)
+        // The store refuses to remove the last Location; keep selection there.
+        state.selectedLocationID = store.locations.contains { $0.id == id } ? id : nextSelection
+        if state.inspectedLocationID == id {
+            setInspection(nil)
         }
     }
 

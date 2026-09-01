@@ -61,6 +61,9 @@ Offsets displayed as UTC offsets ("UTC+9").
 **Greeting**:
 A locale-specific salutation matching a Location's simulated Local Time, stored as per-locale rules, not translations.
 
+**Inspection**:
+Secondary info revealed on the selected Location (Return toggles it): sunrise/sunset, timezone identifier, coordinate. Esc closes it before touching anything else.
+
 **Jump**:
 Rotating the Globe directly to a searched City.
 

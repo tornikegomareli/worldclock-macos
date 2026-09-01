@@ -156,8 +156,41 @@ struct PanelContentView: View {
                 },
                 onScrubEnded: { scrubDrag = nil }
             )
+            if state.inspectedLocationID == location.id {
+                inspectionDetails(for: location, at: instant)
+            }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Secondary info revealed by Return on the selected Location.
+    private func inspectionDetails(for location: Location, at instant: Date) -> some View {
+        let sunLabel: String = switch DayLineModel.sunDay(for: location, at: instant) {
+        case let .risesAndSets(_, sunrise, sunset, _):
+            "Sunrise \(TimeFormatting.timeString(LocalTime(of: sunrise, in: location.timeZone), clockFormat: clockFormat))"
+                + " · Sunset \(TimeFormatting.timeString(LocalTime(of: sunset, in: location.timeZone), clockFormat: clockFormat))"
+        case .twilightOnly:
+            "Twilight only — the sun stays below the horizon"
+        case .polarDay:
+            "Polar day — the sun never sets"
+        case .polarNight:
+            "Polar night — the sun never rises"
+        }
+
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(sunLabel)
+            HStack {
+                Text(location.timeZone.identifier)
+                Spacer()
+                if let latitude = location.latitude, let longitude = location.longitude {
+                    Text(String(format: "%.2f°, %.2f°", latitude, longitude))
+                }
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .transition(.opacity)
     }
 
     private var addLocationFooter: some View {

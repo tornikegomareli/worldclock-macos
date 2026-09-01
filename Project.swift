@@ -2,6 +2,15 @@ import ProjectDescription
 
 let project = Project(
     name: "WorldClock",
+    // Xcode-native SPM integration: Tuist's synthesized resource bundles
+    // mis-type this package's .lproj strings files as plists and fail
+    // validation, so Xcode's own package pipeline builds it instead.
+    packages: [
+        .remote(
+            url: "https://github.com/sindresorhus/KeyboardShortcuts",
+            requirement: .upToNextMajor(from: "2.0.0")
+        )
+    ],
     settings: .settings(
         base: [
             "SWIFT_VERSION": "6.0",
@@ -23,7 +32,8 @@ let project = Project(
                 "WorldClock/Resources",
             ],
             dependencies: [
-                .external(name: "Dependencies")
+                .external(name: "Dependencies"),
+                .package(product: "KeyboardShortcuts"),
             ]
         ),
         .target(
