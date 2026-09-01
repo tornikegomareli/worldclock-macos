@@ -49,17 +49,25 @@ final class TimeEngine {
     }
 
     /// Scrubbing: converts a Day Line drag into the one Global Instant
-    /// (ADR-0001), clamped to ±7 days around Now. `anchor` is the instant
-    /// whose civil day the Day Line showed when the drag started — frozen for
-    /// the whole drag so fractions past the edge extrapolate stably instead
-    /// of re-anchoring on every event.
-    func scrub(toDayFraction fraction: Double, in timeZone: TimeZone, anchoredAt anchor: Date) {
+    /// (ADR-0001), snapped subtly to the Location's hours, half hours,
+    /// sunrise and sunset (Option bypasses via `snapping: false`), then
+    /// clamped to ±7 days around Now. `anchor` is the instant whose civil day
+    /// the Day Line showed when the drag started — frozen for the whole drag
+    /// so fractions past the edge extrapolate stably instead of re-anchoring
+    /// on every event.
+    func scrub(toDayFraction fraction: Double, of location: Location, anchoredAt anchor: Date, snapping: Bool = true) {
         guard fraction.isFinite else { return }
-        let candidate = ScrubberLogic.instant(
+        var candidate = ScrubberLogic.instant(
             atDayFraction: fraction,
             overDayContaining: anchor,
-            in: timeZone
+            in: location.timeZone
         )
+        if snapping {
+            candidate = ScrubberLogic.snapped(
+                candidate,
+                to: ScrubberLogic.snapTargets(for: location, dayContaining: candidate)
+            )
+        }
         simulate(ScrubberLogic.clamped(candidate, around: date.now))
     }
 

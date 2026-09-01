@@ -29,6 +29,19 @@ struct DayLine: Equatable {
 
 /// Maps (Location, Global Instant, Astronomy) to a renderable Day Line.
 enum DayLineModel {
+    /// The Location's sun events for the civil day containing `instant`.
+    /// A Location without coordinates (seeded from a timezone alone)
+    /// degrades to an equatorial point at its zone's mean solar longitude.
+    static func sunDay(for location: Location, at instant: Date) -> Astronomy.SunDay {
+        let offsetHours = Double(location.timeZone.secondsFromGMT(for: instant)) / 3600
+        return Astronomy.sunDay(
+            latitude: location.latitude ?? 0,
+            longitude: location.longitude ?? offsetHours * 15,
+            on: instant,
+            timeZone: location.timeZone
+        )
+    }
+
     static func dayLine(for location: Location, at instant: Date) -> DayLine {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = location.timeZone
@@ -41,18 +54,7 @@ enum DayLineModel {
             min(max(date.timeIntervalSince(midnight) / daySeconds, 0), 1)
         }
 
-        // A Location without coordinates (seeded from a timezone alone)
-        // degrades to an equatorial point at its zone's mean solar longitude.
-        let offsetHours = Double(location.timeZone.secondsFromGMT(for: instant)) / 3600
-        let latitude = location.latitude ?? 0
-        let longitude = location.longitude ?? offsetHours * 15
-
-        let sunDay = Astronomy.sunDay(
-            latitude: latitude,
-            longitude: longitude,
-            on: instant,
-            timeZone: location.timeZone
-        )
+        let sunDay = Self.sunDay(for: location, at: instant)
 
         let segments: [DayLine.Segment]
         let isDaytime: Bool

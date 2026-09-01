@@ -18,7 +18,7 @@ The Time State in which the user has scrubbed the Global Instant away from Now.
 _Avoid_: preview mode, simulation mode
 
 **Scrubbing**:
-Dragging along any Day Line to move the Global Instant; all Locations move together.
+Dragging along any Day Line to move the Global Instant; all Locations move together. Snaps subtly to the dragged Location's full hours, half hours, sunrise and sunset (Option disables snapping; Shift slows the pointer-to-time ratio for precision, which also disables snapping).
 _Avoid_: sliding, seeking
 
 **Local Time**:

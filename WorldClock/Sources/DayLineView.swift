@@ -5,9 +5,9 @@ import SwiftUI
 /// emoji.
 struct DayLineView: View {
     let dayLine: DayLine
-    /// Called with the drag's day fraction while scrubbing; may run past
-    /// [0, 1] when the drag leaves the bar.
-    var onScrub: ((Double) -> Void)?
+    /// Called with the drag's day fraction and pointer velocity (pt/s) while
+    /// scrubbing; the fraction may run past [0, 1] when the drag leaves the bar.
+    var onScrub: ((Double, CGFloat) -> Void)?
     /// Called when the drag ends, so the scrub anchor can be released.
     var onScrubEnded: (() -> Void)?
 
@@ -46,7 +46,7 @@ struct DayLineView: View {
                 DragGesture(minimumDistance: 2)
                     .onChanged { value in
                         guard width > 0 else { return }
-                        onScrub?(value.location.x / width)
+                        onScrub?(value.location.x / width, abs(value.velocity.width))
                     }
                     .onEnded { _ in
                         onScrubEnded?()

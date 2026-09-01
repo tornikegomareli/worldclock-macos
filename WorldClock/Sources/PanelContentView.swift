@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Panel content: the Location list, every Local Time rendering the same
@@ -10,8 +11,9 @@ struct PanelContentView: View {
     @Bindable var state: PanelState
     let databaseLoader: CityDatabaseLoader
 
-    /// The frozen anchor day for the drag in progress, if any.
-    @State private var scrubAnchor: Date?
+    /// The drag in progress: its frozen anchor day plus the raw/effective
+    /// fraction accumulator that implements Shift precision.
+    @State private var scrubDrag: (anchor: Date, previousRaw: Double, effective: Double)?
 
     private let clockFormat = ClockFormat.system()
 
@@ -125,14 +127,32 @@ struct PanelContentView: View {
             }
             DayLineView(
                 dayLine: DayLineModel.dayLine(for: location, at: instant),
-                onScrub: { fraction in
+                onScrub: { raw, velocity in
                     // The anchor day freezes at drag start so fractions past
                     // the edge extrapolate stably (see TimeEngine.scrub).
-                    let anchor = scrubAnchor ?? engine.globalInstant
-                    scrubAnchor = anchor
-                    engine.scrub(toDayFraction: fraction, in: location.timeZone, anchoredAt: anchor)
+                    // Modifiers are read per event, so they work mid-drag.
+                    let modifiers = NSEvent.modifierFlags
+                    let drag = scrubDrag ?? (anchor: engine.globalInstant, previousRaw: raw, effective: raw)
+                    let effective = ScrubberLogic.effectiveDayFraction(
+                        raw: raw,
+                        previousRaw: drag.previousRaw,
+                        previousEffective: drag.effective,
+                        isPrecise: modifiers.contains(.shift)
+                    )
+                    scrubDrag = (drag.anchor, raw, effective)
+                    // Option disables snapping; Shift does too (precision
+                    // means exact minutes, and a fixed snap band would cost
+                    // five times the pointer travel to escape); fast drags
+                    // skip it so snapping stays imperceptible in motion.
+                    let snapping = modifiers.isDisjoint(with: [.option, .shift]) && velocity < 250
+                    engine.scrub(
+                        toDayFraction: effective,
+                        of: location,
+                        anchoredAt: drag.anchor,
+                        snapping: snapping
+                    )
                 },
-                onScrubEnded: { scrubAnchor = nil }
+                onScrubEnded: { scrubDrag = nil }
             )
         }
         .padding(.vertical, 4)
