@@ -11,6 +11,7 @@ struct GlobeSpikeView: View {
     /// Hours away from now; ±7 days like the Panel's scrub range.
     @State private var hoursOffset: Double = Self.launchHoursOffset
     @State private var animating = false
+    @State private var showMask = false
     @State private var pickReadout = "Click the globe to pick a coordinate"
     @State private var setupError: String?
 
@@ -92,6 +93,11 @@ struct GlobeSpikeView: View {
                 Text(pickReadout)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Toggle("Mask", isOn: $showMask)
+                    .onChange(of: showMask) {
+                        scene.debugMask = showMask
+                        scene.updateSun(for: simulatedDate)
+                    }
                 Toggle("Animate", isOn: $animating)
                 Text(String(format: "cam v2 · zoom %.2f · scrolls %d · %.1f ms/update",
                             scene.cameraDistance, scene.scrollEventCount, scene.lastUpdateMilliseconds))
@@ -129,6 +135,7 @@ final class GlobeScene {
     private var scrollMonitor: Any?
     private(set) var scrollEventCount = 0
     var cameraDistance: Double { distance }
+    var debugMask = false
 
     struct Coordinate {
         let latitude: Double
@@ -240,7 +247,7 @@ final class GlobeScene {
             Float(cos(latitude) * cos(longitude)),
             Float(sin(latitude)),
             Float(cos(latitude) * sin(longitude)),
-            0
+            debugMask ? 1 : 0
         )
         globe.model?.materials = [material]
         self.material = material

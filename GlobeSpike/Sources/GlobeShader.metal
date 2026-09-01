@@ -47,8 +47,13 @@ void globeSurface(realitykit::surface_parameters params)
     // texture slot), day side only — the classic sunrise stripe on the sea.
     half waterMask = params.textures().custom().sample(linearSampler, uv).r;
     float3 reflected = reflect(-sunDirection, normal);
-    float glint = pow(saturate(dot(reflected, -viewDirection)), 90.0);
-    color += half3(1.0h, 0.90h, 0.72h) * half(glint) * waterMask * half(dayFactor) * 0.55h;
+    float glint = pow(saturate(dot(reflected, -viewDirection)), 60.0);
+    color += half3(1.0h, 0.90h, 0.72h) * half(glint) * waterMask * half(dayFactor) * 0.9h;
+
+    // Debug: custom.vector.w = 1 renders the water mask directly.
+    if (params.uniforms().custom_parameter().w > 0.5) {
+        color = half3(waterMask);
+    }
 
     // Atmospheric rim: blue scattering climbing toward the limb, stronger on
     // the day side, a whisper on the night side.
