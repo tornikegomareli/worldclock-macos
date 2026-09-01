@@ -110,6 +110,7 @@ struct PanelContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(location.cityName)
                         .font(.body)
+                        .background(HiddenListScrollers())
                     Text(isHome ? "Home" : TimeFormatting.relativeOffset(seconds: offset.seconds))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -217,6 +218,7 @@ struct PanelContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(city.name)
                     .font(.body)
+                    .background(HiddenListScrollers())
                 Text(countryName(for: city.country) ?? city.country)
                     .font(.caption)
                     .foregroundStyle(.secondary)
