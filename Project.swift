@@ -38,6 +38,20 @@ let project = Project(
                 .package(product: "KeyboardShortcuts"),
             ]
         ),
+        // Spike target for issue #14 — lives only on prototype/globe-spike.
+        .target(
+            name: "GlobeSpike",
+            destinations: .macOS,
+            product: .app,
+            bundleId: "com.tornikegomareli.GlobeSpike",
+            deploymentTargets: .macOS("15.0"),
+            infoPlist: .default,
+            sources: [
+                "GlobeSpike/Sources/**",
+                "WorldClock/Sources/Astronomy/Astronomy.swift",
+            ],
+            resources: ["GlobeSpike/Resources/**"]
+        ),
         .target(
             name: "WorldClockTests",
             destinations: .macOS,
