@@ -149,9 +149,9 @@ final class GlobeScene {
 
         let surfaceShader = CustomMaterial.SurfaceShader(named: "globeSurface", in: library)
         var material = try CustomMaterial(surfaceShader: surfaceShader, lightingModel: .unlit)
-        material.baseColor.texture = .init(try TextureResource.load(named: "earth-day"))
-        material.emissiveColor.texture = .init(try TextureResource.load(named: "earth-night"))
-        material.custom.texture = .init(try TextureResource.load(named: "water-mask"))
+        material.baseColor.texture = .init(try Self.loadTexture("earth-day", "jpg"))
+        material.emissiveColor.texture = .init(try Self.loadTexture("earth-night", "jpg"))
+        material.custom.texture = .init(try Self.loadTexture("water-mask", "png"))
         material.custom.value = SIMD4(1, 0, 0, 0)
 
         let globe = ModelEntity(mesh: .generateSphere(radius: 1), materials: [material])
@@ -274,7 +274,17 @@ final class GlobeScene {
         return Coordinate(latitude: latitude, longitude: longitude)
     }
 
+    /// load(named:) insists on an asset catalog once PNGs are involved;
+    /// explicit bundle URLs sidestep it.
+    private static func loadTexture(_ name: String, _ ext: String) throws -> TextureResource {
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else {
+            throw SpikeError.missingTexture(name)
+        }
+        return try TextureResource.load(contentsOf: url)
+    }
+
     enum SpikeError: Error {
         case noMetal
+        case missingTexture(String)
     }
 }
