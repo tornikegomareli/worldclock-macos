@@ -42,6 +42,19 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Set by StatusItemController; ⌘K's Settings command opens its window.
     var openSettingsHandler: (() -> Void)?
 
+    /// The Globe shares this controller's TimeEngine (ADR-0001).
+    private(set) lazy var globeController: GlobeWindowController = {
+        let controller = GlobeWindowController(engine: engine)
+        controller.onClose = { [weak self] in
+            guard let self, let button = statusButton?() else { return }
+            open(under: button)
+        }
+        return controller
+    }()
+
+    /// How the Panel finds its anchor when the Globe hands control back.
+    var statusButton: (() -> NSStatusBarButton?)?
+
     init(settings: SettingsStore) {
         self.settings = settings
         panel = FloatingPanel(
@@ -95,6 +108,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         keyRouter.bind(.character("u")) { [weak self] in self?.toggleOffsetMode() }
         keyRouter.bind(.commandCharacter("k")) { [weak self] in
             self?.state.isCommandSearching = true
+        }
+        keyRouter.bind(.character(" ")) { [weak self] in
+            guard let self else { return }
+            panel.close()
+            globeController.toggle()
         }
         panel.onKeyEvent = { [weak self] event in
             self?.keyRouter.handle(event) ?? false
@@ -198,8 +216,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         case let .removeLocation(location):
             remove(locationID: location.id)
         case .openGlobe:
-            // Graceful no-op until the Globe ships (ADR-0002 track).
-            break
+            panel.close()
+            globeController.open()
         case .switchToUTCMode:
             settings.offsetMode = .utc
         case .switchToRelativeMode:

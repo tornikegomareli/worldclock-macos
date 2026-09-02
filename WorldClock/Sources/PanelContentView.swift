@@ -60,6 +60,7 @@ struct PanelContentView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                globeButton
             }
             .foregroundStyle(.orange)
             .padding(.horizontal, 12)
@@ -71,10 +72,23 @@ struct PanelContentView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+                globeButton
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
+    }
+
+    /// Opens the Globe (also on Space).
+    private var globeButton: some View {
+        Button {
+            onCommand(.openGlobe)
+        } label: {
+            Image(systemName: "globe")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Open Globe (Space)")
     }
 
     /// "Tomorrow · 16:30" — the simulated moment in Home's zone, relative to

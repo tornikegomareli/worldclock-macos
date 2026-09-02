@@ -24,6 +24,7 @@ final class StatusItemController: NSObject {
         panelController = PanelController(settings: settings)
         super.init()
         panelController.openSettingsHandler = { [weak self] in self?.openSettings() }
+        panelController.statusButton = { [weak self] in self?.statusItem.button }
         homeLocationUpdater = HomeLocationUpdater(
             settings: settings,
             store: panelController.store,
