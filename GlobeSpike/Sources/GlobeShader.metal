@@ -40,8 +40,8 @@ void globeSurface(realitykit::surface_parameters params)
 
     // Warm tint inside the twilight band — strongest right on the
     // terminator, leaning into the day side so the night side stays clean.
-    float band = exp(-pow(ndotl / 0.06, 2.0)) * (0.25 + 0.75 * dayFactor);
-    color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.14h;
+    float band = exp(-pow(ndotl / 0.05, 2.0)) * (0.25 + 0.75 * dayFactor);
+    color += half3(0.85h, 0.38h, 0.12h) * half(band) * 0.10h;
 
     // Ocean sun glint: a tight mirror lobe on water only (mask in the custom
     // texture slot), day side only — the classic sunrise stripe on the sea.
