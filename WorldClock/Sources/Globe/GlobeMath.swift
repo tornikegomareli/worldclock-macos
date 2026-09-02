@@ -24,6 +24,12 @@ enum GlobeMath {
         )
     }
 
+    /// Jump: the orbit-camera spherical angles that put a coordinate at the
+    /// center of the visible disc (camera direction == surface direction).
+    static func cameraAngles(latitude: Double, longitude: Double) -> (yaw: Double, pitch: Double) {
+        (yaw: .pi / 2 - longitude * .pi / 180, pitch: latitude * .pi / 180)
+    }
+
     /// The inverse: a (unit-ish) surface position back to latitude/longitude.
     static func coordinate(fromUnitPosition position: SIMD3<Float>) -> (latitude: Double, longitude: Double) {
         let unit = simd_normalize(position)

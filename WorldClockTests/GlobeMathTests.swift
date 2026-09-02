@@ -48,6 +48,29 @@ struct GlobeMathTests {
         }
     }
 
+    @Test("Jump: camera angles put the target city at the disc center")
+    func cameraAnglesFaceTheTarget() {
+        let fixtures: [(Double, Double)] = [
+            (41.69, 44.80),    // Tbilisi
+            (-33.87, 151.21),  // Sydney
+            (40.71, -74.01),   // New York
+            (64.15, -21.94),   // Reykjavík
+        ]
+        for (latitude, longitude) in fixtures {
+            let angles = GlobeMath.cameraAngles(latitude: latitude, longitude: longitude)
+            // A camera on spherical coordinates (yaw, pitch) sits along this
+            // direction; the target faces it when the directions coincide.
+            let cameraDirection = SIMD3(
+                Float(cos(angles.pitch) * sin(angles.yaw)),
+                Float(sin(angles.pitch)),
+                Float(cos(angles.pitch) * cos(angles.yaw))
+            )
+            let target = GlobeMath.unitPosition(latitude: latitude, longitude: longitude)
+            let alignment = cameraDirection.x * target.x + cameraDirection.y * target.y + cameraDirection.z * target.z
+            #expect(alignment > 0.9999, "camera misses (\(latitude), \(longitude)): \(alignment)")
+        }
+    }
+
     @Test("Unit position and coordinate are inverses — the picking round trip")
     func coordinateRoundTrip() {
         let fixtures: [(Double, Double)] = [

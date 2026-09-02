@@ -12,6 +12,7 @@ import SwiftUI
 @MainActor
 final class GlobeSceneController {
     private let engine: TimeEngine
+    private let store: LocationsStore
 
     private var globe: ModelEntity?
     private var halo: ModelEntity?
@@ -28,8 +29,9 @@ final class GlobeSceneController {
     private var magnifyStartDistance: Double?
     private var scrollMonitor: Any?
 
-    init(engine: TimeEngine) {
+    init(engine: TimeEngine, store: LocationsStore) {
         self.engine = engine
+        self.store = store
     }
 
     func build(in content: RealityViewCameraContent) throws {
@@ -68,6 +70,7 @@ final class GlobeSceneController {
         self.camera = camera
         positionCamera()
         trackGlobalInstant()
+        trackMarkers()
     }
 
     /// Re-renders the sun for every Global Instant change — ticking and
@@ -92,6 +95,113 @@ final class GlobeSceneController {
             atmosphereMaterial.custom.value = vector
             halo.model?.materials = [atmosphereMaterial]
             self.atmosphereMaterial = atmosphereMaterial
+        }
+    }
+
+    // MARK: Markers
+
+    private var markers: [Location.ID: ModelEntity] = [:]
+
+    /// Keeps one subtle marker per saved Location, resynced on add/remove.
+    private func trackMarkers() {
+        withObservationTracking { [weak self] in
+            guard let self else { return }
+            syncMarkers(with: store.locations)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackMarkers() }
+        }
+    }
+
+    private func syncMarkers(with locations: [Location]) {
+        guard let globe else { return }
+        var stale = markers
+        for location in locations {
+            stale.removeValue(forKey: location.id)
+            guard markers[location.id] == nil,
+                  let latitude = location.latitude, let longitude = location.longitude
+            else { continue }
+            let marker = ModelEntity(
+                mesh: .generateSphere(radius: 0.012),
+                materials: [UnlitMaterial(color: .white)]
+            )
+            marker.name = location.id
+            marker.position = GlobeMath.unitPosition(latitude: latitude, longitude: longitude) * 1.005
+            marker.components.set(CollisionComponent(shapes: [.generateSphere(radius: 0.03)]))
+            marker.components.set(InputTargetComponent())
+            globe.addChild(marker)
+            markers[location.id] = marker
+        }
+        for (id, entity) in stale {
+            entity.removeFromParent()
+            markers.removeValue(forKey: id)
+        }
+    }
+
+    /// Hover feedback: the hovered marker grows and warms.
+    func highlightMarker(_ id: Location.ID?) {
+        for (markerID, marker) in markers {
+            let highlighted = markerID == id
+            marker.scale = highlighted ? SIMD3(repeating: 1.8) : SIMD3(repeating: 1)
+            marker.model?.materials = [
+                UnlitMaterial(color: highlighted ? .systemYellow : .white)
+            ]
+        }
+    }
+
+    // MARK: Picking
+
+    enum PickResult {
+        case marker(Location.ID)
+        case surface(latitude: Double, longitude: Double)
+        case miss
+    }
+
+    func pick(at point: CGPoint) -> PickResult {
+        guard let content, let globe else { return .miss }
+        let hits = content.hitTest(point: point, in: .local)
+        if let markerHit = hits.first(where: { markers[$0.entity.name] != nil }) {
+            return .marker(markerHit.entity.name)
+        }
+        guard let globeHit = hits.first(where: { $0.entity == globe }) else { return .miss }
+        let local = globe.convert(position: globeHit.position, from: nil)
+        let coordinate = GlobeMath.coordinate(fromUnitPosition: local)
+        return .surface(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    }
+
+    /// The marker under the pointer, for hover highlighting.
+    func markerID(at point: CGPoint) -> Location.ID? {
+        guard let content else { return nil }
+        return content.hitTest(point: point, in: .local)
+            .first { markers[$0.entity.name] != nil }?
+            .entity.name
+    }
+
+    // MARK: Jump
+
+    private var flyTask: Task<Void, Never>?
+
+    /// Rotates the camera to face a coordinate along the shortest arc.
+    func fly(toLatitude latitude: Double, longitude: Double) {
+        let target = GlobeMath.cameraAngles(latitude: latitude, longitude: longitude)
+        var deltaYaw = (target.yaw - yaw).truncatingRemainder(dividingBy: 2 * .pi)
+        if deltaYaw > .pi { deltaYaw -= 2 * .pi }
+        if deltaYaw < -.pi { deltaYaw += 2 * .pi }
+        let startYaw = yaw
+        let startPitch = pitch
+        let deltaPitch = target.pitch - pitch
+
+        flyTask?.cancel()
+        flyTask = Task { @MainActor [weak self] in
+            let steps = 40
+            for step in 1...steps {
+                guard let self, !Task.isCancelled else { return }
+                let t = Double(step) / Double(steps)
+                let eased = t * t * (3 - 2 * t) // smoothstep
+                yaw = startYaw + deltaYaw * eased
+                pitch = startPitch + deltaPitch * eased
+                positionCamera()
+                try? await Task.sleep(for: .milliseconds(14))
+            }
         }
     }
 

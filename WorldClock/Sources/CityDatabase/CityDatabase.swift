@@ -112,13 +112,19 @@ final class CityDatabase: Sendable {
         return nil
     }
 
-    /// The City closest to a coordinate — the traveling-Home lookup.
-    /// Equirectangular approximation: exact ordering matters, not distance.
-    func nearestCity(latitude: Double, longitude: Double) -> City? {
+    /// The City closest to a coordinate — the traveling-Home lookup, and,
+    /// with a cutoff, the Globe's click resolution (ocean clicks resolve to
+    /// nothing). Equirectangular approximation; 1° of latitude ≈ 111 km.
+    func nearestCity(latitude: Double, longitude: Double, withinKilometers: Double? = nil) -> City? {
         let cosLatitude = cos(latitude * .pi / 180)
-        return cities.min { lhs, rhs in
-            squaredDistance(from: lhs) < squaredDistance(from: rhs)
+        guard let nearest = cities.min(by: { squaredDistance(from: $0) < squaredDistance(from: $1) }) else {
+            return nil
         }
+        if let withinKilometers {
+            let maxSquaredDegrees = pow(withinKilometers / 111.0, 2)
+            guard squaredDistance(from: nearest) <= maxSquaredDegrees else { return nil }
+        }
+        return nearest
 
         func squaredDistance(from city: City) -> Double {
             let dLatitude = city.latitude - latitude

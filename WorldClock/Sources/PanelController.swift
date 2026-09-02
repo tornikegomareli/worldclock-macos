@@ -44,7 +44,11 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// The Globe shares this controller's TimeEngine (ADR-0001).
     private(set) lazy var globeController: GlobeWindowController = {
-        let controller = GlobeWindowController(engine: engine)
+        let controller = GlobeWindowController(
+            engine: engine, store: store, settings: settings,
+            databaseLoader: databaseLoader,
+            onAddCity: { [weak self] city in self?.execute(.addLocation(city)) }
+        )
         controller.onClose = { [weak self] in
             guard let self, let button = statusButton?() else { return }
             open(under: button)

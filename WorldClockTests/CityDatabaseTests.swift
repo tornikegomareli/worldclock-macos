@@ -129,6 +129,16 @@ struct CityDatabaseTests {
         #expect(CityDatabase(cities: []).nearestCity(latitude: 0, longitude: 0) == nil)
     }
 
+    @Test("A distance cutoff keeps ocean clicks from claiming a far city")
+    func nearestCityWithCutoff() {
+        // Within ~500 km, the Globe click resolves normally…
+        #expect(database.nearestCity(latitude: 51.3, longitude: -0.5, withinKilometers: 500)?.name == "London")
+        // …but the mid-Pacific resolves to nothing instead of San Francisco.
+        #expect(database.nearestCity(latitude: -20, longitude: -140, withinKilometers: 500) == nil)
+        // The unbounded traveling-Home lookup still always answers.
+        #expect(database.nearestCity(latitude: -20, longitude: -140) != nil)
+    }
+
     @Test("The bundled index loads offline and finds well-known cities")
     func bundledIndexLoads() throws {
         let bundled = try CityDatabase.loadBundled()
