@@ -41,6 +41,10 @@ struct PanelContentView: View {
                 addLocationFooter
             }
         }
+        // The Panel half of the Globe transition: outward scale + dim
+        // (opacity only under the crossfade policy).
+        .scaleEffect(state.isGlobePresented && !settings.prefersCrossfade ? 1.08 : 1)
+        .opacity(state.isGlobePresented ? 0 : 1)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 

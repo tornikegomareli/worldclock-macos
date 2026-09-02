@@ -14,6 +14,10 @@ final class PanelState {
     var isCommandSearching = false
     var commandQuery = ""
 
+    /// True while the Globe has taken over — rows scale outward and dim,
+    /// and animate back when the Globe returns.
+    var isGlobePresented = false
+
     var isAnyOverlayOpen: Bool { isSearching || isCommandSearching }
 
     func dismissOverlays() {
@@ -52,6 +56,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         controller.onClose = { [weak self] in
             guard let self, let button = statusButton?() else { return }
             open(under: button)
+            withAnimation(settings.animation(.easeOut(duration: 0.2))) {
+                self.state.isGlobePresented = false
+            }
         }
         return controller
     }()
@@ -114,12 +121,29 @@ final class PanelController: NSObject, NSWindowDelegate {
             self?.state.isCommandSearching = true
         }
         keyRouter.bind(.character(" ")) { [weak self] in
-            guard let self else { return }
-            panel.close()
-            globeController.toggle()
+            self?.presentGlobe()
         }
         panel.onKeyEvent = { [weak self] event in
             self?.keyRouter.handle(event) ?? false
+        }
+    }
+
+    /// The Panel half of the Panel↔Globe transition: rows translate outward
+    /// and dim, then the Globe expands out of the Panel's frame; closing
+    /// reverses both.
+    private func presentGlobe() {
+        guard !globeController.isVisible else {
+            globeController.close()
+            return
+        }
+        let frame = panel.frame
+        withAnimation(settings.animation(.easeOut(duration: 0.15))) {
+            state.isGlobePresented = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(self.settings.prefersCrossfade ? 60 : 140))
+            self.panel.close()
+            self.globeController.open(from: frame)
         }
     }
 
@@ -220,8 +244,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         case let .removeLocation(location):
             remove(locationID: location.id)
         case .openGlobe:
-            panel.close()
-            globeController.open()
+            presentGlobe()
         case .switchToUTCMode:
             settings.offsetMode = .utc
         case .switchToRelativeMode:

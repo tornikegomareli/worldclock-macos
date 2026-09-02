@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftUI
@@ -54,6 +55,7 @@ final class SettingsStore {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let locale: Locale
+    @ObservationIgnored private let reduceMotion: () -> Bool
 
     var offsetMode: OffsetMode {
         didSet { defaults.set(offsetMode.rawValue, forKey: Keys.offsetMode) }
@@ -92,9 +94,18 @@ final class SettingsStore {
         didSet { defaults.set(menuBarLocationID, forKey: Keys.menuBarLocationID) }
     }
 
-    /// `withAnimation`-compatible: nil when the user disabled animations.
-    func animation(_ animation: Animation) -> Animation? {
-        animationsEnabled ? animation : nil
+    /// The motion policy for spatial animations: the requested animation
+    /// normally, a plain crossfade-length ease under Reduce Motion, nothing
+    /// when the user disabled animations.
+    func animation(_ spatial: Animation) -> Animation? {
+        guard animationsEnabled else { return nil }
+        return reduceMotion() ? .easeInOut(duration: 0.2) : spatial
+    }
+
+    /// True when spatial choreography (window morphs, sweeps) should be
+    /// replaced by simple fades.
+    var prefersCrossfade: Bool {
+        !animationsEnabled || reduceMotion()
     }
 
     var snapshot: SettingsSnapshot {
@@ -136,9 +147,16 @@ final class SettingsStore {
         }
     }
 
-    init(defaults: UserDefaults = .standard, locale: Locale = .current) {
+    init(
+        defaults: UserDefaults = .standard,
+        locale: Locale = .current,
+        reduceMotion: @escaping () -> Bool = {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        }
+    ) {
         self.defaults = defaults
         self.locale = locale
+        self.reduceMotion = reduceMotion
         offsetMode = defaults.string(forKey: Keys.offsetMode)
             .flatMap(OffsetMode.init(rawValue:)) ?? .relative
         clockFormatPreference = defaults.string(forKey: Keys.clockFormat)

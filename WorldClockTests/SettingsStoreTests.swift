@@ -71,6 +71,22 @@ struct SettingsStoreTests {
         #expect(restored.snapshot == snapshot)
     }
 
+    @Test("Motion policy: full normally, crossfade under Reduce Motion, none when disabled")
+    @MainActor
+    func motionPolicy() {
+        let full = SettingsStore(defaults: makeDefaults(), reduceMotion: { false })
+        #expect(full.animation(.spring(duration: 0.4)) == .spring(duration: 0.4))
+
+        // Reduce Motion replaces every spatial animation with a crossfade.
+        let reduced = SettingsStore(defaults: makeDefaults(), reduceMotion: { true })
+        #expect(reduced.animation(.spring(duration: 0.4)) == .easeInOut(duration: 0.2))
+
+        // The user's animations-off toggle beats both: instant.
+        let off = SettingsStore(defaults: makeDefaults(), reduceMotion: { true })
+        off.animationsEnabled = false
+        #expect(off.animation(.spring(duration: 0.4)) == nil)
+    }
+
     @Test("The clock format preference resolves overrides, pinned locale otherwise")
     @MainActor
     func clockFormatResolution() {

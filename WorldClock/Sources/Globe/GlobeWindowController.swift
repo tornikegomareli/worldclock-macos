@@ -48,6 +48,10 @@ final class GlobeWindowController {
     /// Called when the Globe closes so the Panel can come back.
     var onClose: (() -> Void)?
 
+    /// Where the Globe expanded from — the close animation returns there:
+    /// objects remember where they came from.
+    private var originFrame: NSRect?
+
     init(
         engine: TimeEngine,
         store: LocationsStore,
@@ -66,15 +70,15 @@ final class GlobeWindowController {
         window?.isVisible ?? false
     }
 
-    func toggle() {
+    func toggle(from panelFrame: NSRect? = nil) {
         if isVisible {
             close()
         } else {
-            open()
+            open(from: panelFrame)
         }
     }
 
-    func open() {
+    func open(from panelFrame: NSRect? = nil) {
         if window == nil {
             let sceneController = GlobeSceneController(engine: engine, store: store)
             let window = GlobeWindow(
@@ -101,9 +105,52 @@ final class GlobeWindowController {
             self.window = window
             self.sceneController = sceneController
         }
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        originFrame = panelFrame
+        present()
         sceneController?.installScrollZoomMonitor()
+    }
+
+    /// The spatial half of the Panel↔Globe transition: the window expands
+    /// out of the Panel's frame and later shrinks back into it. Under the
+    /// crossfade policy it fades in place instead.
+    private func present() {
+        guard let window else { return }
+        let target = targetFrame(near: originFrame)
+        if settings.prefersCrossfade || originFrame == nil {
+            window.setFrame(target, display: false)
+            window.alphaValue = 0
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = settings.animationsEnabled ? 0.2 : 0
+                window.animator().alphaValue = 1
+            }
+        } else {
+            window.setFrame(originFrame ?? target, display: false)
+            window.alphaValue = 0.3
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(target, display: true)
+                window.animator().alphaValue = 1
+            }
+        }
+    }
+
+    private func targetFrame(near origin: NSRect?) -> NSRect {
+        let screen = origin.flatMap { frame in
+            NSScreen.screens.first { $0.frame.intersects(frame) }
+        } ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let size = NSSize(width: 760, height: 680)
+        return NSRect(
+            x: visible.midX - size.width / 2,
+            y: visible.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
     }
 
     /// Esc walks back inside the Globe before it ever closes the window.
@@ -120,7 +167,27 @@ final class GlobeWindowController {
 
     func close() {
         sceneController?.removeScrollZoomMonitor()
-        window?.close()
-        onClose?()
+        guard let window, window.isVisible else {
+            onClose?()
+            return
+        }
+        let finish: () -> Void = { [weak self] in
+            window.orderOut(nil)
+            window.alphaValue = 1
+            self?.onClose?()
+        }
+        if settings.prefersCrossfade || originFrame == nil {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = settings.animationsEnabled ? 0.15 : 0
+                window.animator().alphaValue = 0
+            }, completionHandler: finish)
+        } else {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(originFrame ?? window.frame, display: true)
+                window.animator().alphaValue = 0
+            }, completionHandler: finish)
+        }
     }
 }
