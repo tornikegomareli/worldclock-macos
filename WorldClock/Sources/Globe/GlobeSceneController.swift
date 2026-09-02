@@ -117,15 +117,18 @@ final class GlobeSceneController {
         var stale = markers
         for location in locations {
             stale.removeValue(forKey: location.id)
-            guard markers[location.id] == nil,
-                  let latitude = location.latitude, let longitude = location.longitude
-            else { continue }
+            guard let latitude = location.latitude, let longitude = location.longitude else { continue }
+            let position = GlobeMath.unitPosition(latitude: latitude, longitude: longitude) * 1.005
+            if let existing = markers[location.id] {
+                existing.position = position
+                continue
+            }
             let marker = ModelEntity(
                 mesh: .generateSphere(radius: 0.012),
                 materials: [UnlitMaterial(color: .white)]
             )
             marker.name = location.id
-            marker.position = GlobeMath.unitPosition(latitude: latitude, longitude: longitude) * 1.005
+            marker.position = position
             marker.components.set(CollisionComponent(shapes: [.generateSphere(radius: 0.03)]))
             marker.components.set(InputTargetComponent())
             globe.addChild(marker)
@@ -134,6 +137,23 @@ final class GlobeSceneController {
         for (id, entity) in stale {
             entity.removeFromParent()
             markers.removeValue(forKey: id)
+        }
+        updateMarkerVisibility()
+    }
+
+    /// Far-side markers bleed through the sphere and steal hit tests;
+    /// disable everything on the back hemisphere relative to the camera.
+    private func updateMarkerVisibility() {
+        let cameraDirection = simd_normalize(
+            SIMD3(
+                Float(cos(pitch) * sin(yaw)),
+                Float(sin(pitch)),
+                Float(cos(pitch) * cos(yaw))
+            )
+        )
+        for marker in markers.values {
+            let facing = simd_dot(simd_normalize(marker.position), cameraDirection)
+            marker.isEnabled = facing > 0.05
         }
     }
 
@@ -158,9 +178,11 @@ final class GlobeSceneController {
 
     func pick(at point: CGPoint) -> PickResult {
         guard let content, let globe else { return .miss }
+        // Only the nearest hit counts: a marker behind the globe must never
+        // outrank the surface in front of it.
         let hits = content.hitTest(point: point, in: .local)
-        if let markerHit = hits.first(where: { markers[$0.entity.name] != nil }) {
-            return .marker(markerHit.entity.name)
+        if let nearest = hits.first, markers[nearest.entity.name] != nil {
+            return .marker(nearest.entity.name)
         }
         guard let globeHit = hits.first(where: { $0.entity == globe }) else { return .miss }
         let local = globe.convert(position: globeHit.position, from: nil)
@@ -258,6 +280,7 @@ final class GlobeSceneController {
             Float(distance * cos(pitch) * cos(yaw)),
         ]
         camera.look(at: .zero, from: camera.position, relativeTo: nil)
+        updateMarkerVisibility()
     }
 
     private static func loadTexture(
