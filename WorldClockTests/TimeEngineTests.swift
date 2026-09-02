@@ -83,6 +83,10 @@ struct TimeEngineTests {
         let engine = makeEngine(date: date, tickClock: tickClock)
 
         engine.startTicking()
+        // Let the tick task reach its first sleep before advancing — on slow
+        // CI runners the TestClock can otherwise advance past an unscheduled
+        // sleeper.
+        for _ in 0..<20 { await Task.yield() }
 
         // 30 seconds to the 12:01 boundary.
         date.setValue(instant("2026-01-15T12:01:00Z"))
