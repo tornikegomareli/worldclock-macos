@@ -132,7 +132,7 @@ final class GlobeSceneController {
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return event }
             MainActor.assumeIsolated {
-                let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 8
+                let delta = Double(event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 8)
                 self.distance = min(max(self.distance * (1 - delta * 0.005), 1.3), 8)
                 self.positionCamera()
             }
