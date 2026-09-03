@@ -337,7 +337,8 @@ struct PanelContentView: View {
                     lane: MeridianModel.lane(for: location, homeZone: homeZone, at: instant),
                     altitudes: MeridianModel.sunAltitudes(for: location, homeZone: homeZone, at: instant),
                     starSeed: starSeed(for: location),
-                    theme: theme,
+                    animates: settings.animationsEnabled && !settings.prefersCrossfade,
+                    tintStrength: isTimeTravel ? 0.45 : 0,
                     showsMoonPhase: settings.showMoonPhase,
                     onScrub: { raw, velocity in scrub(raw: raw, velocity: velocity) },
                     onScrubEnded: { scrubDrag = nil }
