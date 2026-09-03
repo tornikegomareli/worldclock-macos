@@ -1,10 +1,12 @@
 import AppKit
+import simd
 import SwiftUI
 
-/// Panel content: the Location list, every Local Time rendering the same
-/// Global Instant. A selected Location can be removed with Delete and the
-/// list drag-reordered; the first Location is Home and anchors Relative Mode
-/// offsets. "+ Add Location" (or A) opens the City search overlay.
+/// Panel content, Meridian layout: an identity header ("It's 5:02 PM here in
+/// San Francisco" under a sky wash tracking home's sun), then every Location
+/// as a lane on one shared 24-hour home-time axis with a single meridian
+/// cursor crossing all lanes at the Global Instant. Dragging any lane scrubs
+/// the meridian. The Globe expands in place of the lanes.
 struct PanelContentView: View {
     let engine: TimeEngine
     let store: LocationsStore
@@ -13,7 +15,23 @@ struct PanelContentView: View {
     let settings: SettingsStore
     let weatherStore: WeatherStore
     let greetingProvider: GreetingProvider?
+    let globeScene: GlobeSceneController
+    let globeState: GlobeState
     let onCommand: (PanelCommand) -> Void
+
+    /// The shared column geometry: name | lane | time. The axis labels and
+    /// the meridian cursor derive from the same constants, so they align.
+    enum Metrics {
+        static let nameWidth: CGFloat = 100
+        static let timeWidth: CGFloat = 66
+        static let leadingPad: CGFloat = 14
+        static let trailingPad: CGFloat = 12
+        static let columnSpacing: CGFloat = 8
+        static let collapsedWidth: CGFloat = 380
+        static let globeWidth: CGFloat = 440
+        static let globeAreaHeight: CGFloat = 470
+        static let overlayHeight: CGFloat = 460
+    }
 
     /// The drag in progress: its frozen anchor day plus the raw/effective
     /// fraction accumulator that implements Shift precision.
@@ -27,195 +45,323 @@ struct PanelContentView: View {
     /// The Location under the pointer; its secondary info shows the Greeting.
     @State private var hoveredLocationID: Location.ID?
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private var clockFormat: ClockFormat { settings.resolvedClockFormat }
+    private var isTimeTravel: Bool { engine.state != .now }
+    private var theme: PanelTheme {
+        .resolve(dark: colorScheme == .dark, timeTravel: isTimeTravel)
+    }
+    private var homeZone: TimeZone { store.home?.timeZone ?? .current }
 
     var body: some View {
         VStack(spacing: 0) {
             if state.isSearching {
                 searchOverlay
+                    .frame(height: Metrics.overlayHeight)
             } else if state.isCommandSearching {
                 commandOverlay
+                    .frame(height: Metrics.overlayHeight)
             } else {
-                timeStateHeader
-                locationList
-                addLocationFooter
-            }
-        }
-        // The Panel half of the Globe transition: outward scale + dim
-        // (opacity only under the crossfade policy).
-        .scaleEffect(state.isGlobePresented && !settings.prefersCrossfade ? 1.08 : 1)
-        .opacity(state.isGlobePresented ? 0 : 1)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    // MARK: Time State header
-
-    @ViewBuilder
-    private var timeStateHeader: some View {
-        if case .simulated = engine.state {
-            HStack(spacing: 6) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.caption)
-                Text("Time Travel · \(timeTravelLabel)")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Button("Now") {
-                    withAnimation(settings.animation(.spring(duration: 0.4))) { engine.returnToNow() }
+                identityHeader
+                if state.isGlobePresented {
+                    GlobeView(
+                        controller: globeScene, engine: engine, store: store,
+                        settings: settings, databaseLoader: databaseLoader,
+                        state: globeState, theme: theme,
+                        onAddCity: { onCommand(.addLocation($0)) }
+                    )
+                    .frame(height: Metrics.globeAreaHeight)
+                    .transition(.opacity)
+                } else {
+                    axisRow
+                    lanesArea
+                    addLocationFooter
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                globeButton
             }
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.orange.opacity(0.12))
-        } else {
-            HStack {
-                Text("Now")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                globeButton
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
         }
+        .frame(width: state.isGlobePresented ? Metrics.globeWidth : Metrics.collapsedWidth)
+        .foregroundStyle(theme.text)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 14).fill(theme.background)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 0.5))
+        .animation(settings.animation(.easeInOut(duration: 0.35)), value: isTimeTravel)
+        .animation(settings.animation(.easeInOut(duration: 0.35)), value: state.isGlobePresented)
     }
 
-    /// Opens the Globe (also on Space).
-    private var globeButton: some View {
+    // MARK: Identity header
+
+    private var identityHeader: some View {
+        let instant = engine.globalInstant
+        let local = LocalTime(of: instant, in: homeZone)
+        let (time, suffix) = splitTime(local)
+
+        return VStack(spacing: 0) {
+            Text(kicker)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.66)
+                .textCase(.uppercase)
+                .foregroundStyle(theme.accent)
+            Text("It’s")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(theme.secondaryText)
+                .padding(.top, 6)
+            HStack(alignment: .lastTextBaseline, spacing: 5) {
+                Text(time)
+                    .font(.system(size: 44, weight: .light))
+                    .monospacedDigit()
+                    .tracking(-1.3)
+                    .contentTransition(.numericText())
+                if let suffix {
+                    Text(suffix)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+            .padding(.top, 2)
+            .animation(settings.animation(.easeInOut(duration: 0.2)), value: time)
+            HStack(spacing: 3) {
+                Text("here in")
+                    .foregroundStyle(theme.secondaryText)
+                Text(store.home?.cityName ?? "—")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .padding(.top, 6)
+            wordmark
+                .padding(.top, 12)
+        }
+        .padding(EdgeInsets(top: 22, leading: 16, bottom: 16, trailing: 16))
+        .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            if let skyColor {
+                LinearGradient(colors: [skyColor, .clear], startPoint: .top, endPoint: .bottom)
+                    .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if isTimeTravel {
+                Button("Now") { onCommand(.returnToNow) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(theme.onAccent)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(theme.accent, in: Capsule())
+                    .padding(14)
+                    .transition(.opacity)
+            }
+        }
+        .animation(settings.animation(.easeInOut(duration: 0.4)), value: skyColor)
+    }
+
+    /// "Now · Wed, Sep 3", or "Time Travel · Tomorrow" in the home zone.
+    private var kicker: String {
+        if isTimeTravel {
+            let day = TimeFormatting.relativeDayLabel(
+                of: engine.globalInstant, in: homeZone,
+                relativeTo: engine.now, in: homeZone
+            ) ?? "Today"
+            return "Time Travel · \(day)"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = homeZone
+        formatter.dateFormat = "EEE, MMM d"
+        return "Now · \(formatter.string(from: engine.globalInstant))"
+    }
+
+    /// WORLD · globe coin · CLOCK. The coin is the Globe toggle (also Space);
+    /// it fills with accent while the Globe is open.
+    private var wordmark: some View {
         Button {
             onCommand(.openGlobe)
         } label: {
-            Image(systemName: "globe")
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text("WORLD").tracking(1.8)
+                ZStack {
+                    if state.isGlobePresented {
+                        Circle().fill(theme.accent)
+                    } else {
+                        Circle().fill(RadialGradient(
+                            colors: [
+                                Color(red: 120 / 255, green: 170 / 255, blue: 230 / 255, opacity: 0.55),
+                                Color(red: 40 / 255, green: 70 / 255, blue: 130 / 255, opacity: 0.35),
+                            ],
+                            center: UnitPoint(x: 0.36, y: 0.32),
+                            startRadius: 0,
+                            endRadius: 20
+                        ))
+                    }
+                    Image(systemName: "globe")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(state.isGlobePresented ? theme.onAccent : theme.text)
+                }
+                .frame(width: 30, height: 30)
+                .overlay(Circle().strokeBorder(theme.edge, lineWidth: 1))
+                Text("CLOCK").tracking(1.8)
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Open Globe (Space)")
+        .help("Open the Globe (Space)")
     }
 
-    /// "Tomorrow · 16:30" — the simulated moment in Home's zone, relative to
-    /// the real clock.
-    private var timeTravelLabel: String {
-        let homeZone = store.home?.timeZone ?? .current
-        let day = TimeFormatting.relativeDayLabel(
-            of: engine.globalInstant, in: homeZone,
-            relativeTo: engine.now, in: homeZone
-        ) ?? "Today"
-        let time = TimeFormatting.timeString(
-            LocalTime(of: engine.globalInstant, in: homeZone),
-            clockFormat: clockFormat
-        )
-        return "\(day) · \(time)"
+    /// The header wash from home's real sun altitude: day blue, dusk warm,
+    /// night indigo. Suppressed during Time Travel — amber owns the panel.
+    private var skyColor: Color? {
+        guard !isTimeTravel, let home = store.home,
+              let latitude = home.latitude, let longitude = home.longitude
+        else { return nil }
+        let sun = GlobeMath.sunDirection(at: engine.globalInstant)
+        let position = GlobeMath.unitPosition(latitude: latitude, longitude: longitude)
+        let altitude = asin(Double(min(max(simd_dot(sun, position), -1), 1))) * 180 / .pi
+        if abs(altitude) < 8 { return theme.skyDusk }
+        return altitude >= 8 ? theme.skyDay : theme.skyNight
     }
 
-    // MARK: Location list
+    private func splitTime(_ localTime: LocalTime) -> (time: String, suffix: String?) {
+        switch clockFormat {
+        case .twentyFourHour:
+            return (String(format: "%02d:%02d", localTime.hour, localTime.minute), nil)
+        case .twelveHour:
+            let hour12 = localTime.hour % 12 == 0 ? 12 : localTime.hour % 12
+            return (
+                String(format: "%d:%02d", hour12, localTime.minute),
+                localTime.hour < 12 ? "AM" : "PM"
+            )
+        }
+    }
 
-    private var locationList: some View {
-        List(selection: $state.selectedLocationID) {
+    // MARK: Shared axis + lanes
+
+    /// Hour labels over the lane column: 0 · 6 · 12 · 18 · 24, in home time.
+    private var axisRow: some View {
+        HStack(spacing: Metrics.columnSpacing) {
+            Color.clear.frame(width: Metrics.nameWidth, height: 1)
+            GeometryReader { geometry in
+                ZStack {
+                    ForEach([0, 6, 12, 18, 24], id: \.self) { hour in
+                        Text("\(hour)")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(theme.tertiaryText)
+                            .position(
+                                x: min(max(geometry.size.width * CGFloat(hour) / 24, 5), geometry.size.width - 8),
+                                y: geometry.size.height / 2
+                            )
+                    }
+                }
+            }
+            .frame(height: 14)
+            Color.clear.frame(width: Metrics.timeWidth, height: 1)
+        }
+        .padding(.leading, Metrics.leadingPad)
+        .padding(.trailing, Metrics.trailingPad)
+    }
+
+    /// The Global Instant as a fraction of home's civil day — where the
+    /// meridian cursor crosses every lane.
+    private var meridianFraction: Double {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = homeZone
+        let instant = engine.globalInstant
+        let start = calendar.startOfDay(for: instant)
+        let end = calendar.startOfDay(for: start.addingTimeInterval(36 * 3600))
+        return instant.timeIntervalSince(start) / end.timeIntervalSince(start)
+    }
+
+    private var lanesArea: some View {
+        VStack(spacing: 0) {
             ForEach(store.locations) { location in
                 locationRow(for: location)
-                    .tag(location.id)
             }
-            .onMove { store.move(fromOffsets: $0, toOffset: $1) }
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
+        .overlay {
+            GeometryReader { geometry in
+                let laneWidth = geometry.size.width - Metrics.leadingPad - Metrics.trailingPad
+                    - Metrics.nameWidth - Metrics.timeWidth - 2 * Metrics.columnSpacing
+                let x = Metrics.leadingPad + Metrics.nameWidth + Metrics.columnSpacing
+                    + laneWidth * meridianFraction
+                Rectangle()
+                    .fill(theme.cursor)
+                    .frame(width: 1, height: geometry.size.height)
+                    .shadow(color: theme.cursor, radius: 3)
+                    .opacity(0.55)
+                    .position(x: x, y: geometry.size.height / 2)
+            }
+            .allowsHitTesting(false)
+        }
     }
 
     private func locationRow(for location: Location) -> some View {
         let instant = engine.globalInstant
         let localTime = LocalTime(of: instant, in: location.timeZone)
         let isHome = location.id == store.home?.id
-        let homeZone = store.home?.timeZone ?? location.timeZone
         let offset = RelativeOffset(of: location.timeZone, home: homeZone, at: instant)
-
         let dateLabel = TimeFormatting.relativeDayLabel(
             of: instant, in: location.timeZone,
             relativeTo: instant, in: homeZone
         )
+        let (time, suffix) = splitTime(localTime)
+        let isSelected = state.selectedLocationID == location.id
+        let isHovered = hoveredLocationID == location.id
+        let caption = offsetCaption(for: location, isHome: isHome, relativeOffset: offset, at: instant)
 
         return VStack(spacing: 4) {
-            HStack {
+            HStack(spacing: Metrics.columnSpacing) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isHome ? homeTitle(for: location) : location.cityName)
-                        .font(.body)
-                        .background(HiddenListScrollers())
-                    // A Button, not a tap gesture: the List's row selection
-                    // swallows plain gestures on row content.
-                    let caption = offsetCaption(for: location, isHome: isHome, relativeOffset: offset, at: instant)
+                    Text(location.cityName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(-0.13)
+                        .lineLimit(1)
                     Button {
                         revealBothOffsets(for: location.id)
                     } label: {
                         Text(caption)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            // Crossfade + animated width whenever the caption
-                            // swaps (hover greeting, click reveal, U toggle).
+                            .font(.system(size: 11))
+                            .foregroundStyle(theme.secondaryText)
+                            .lineLimit(1)
                             .contentTransition(.opacity)
                             .animation(settings.animation(.easeInOut(duration: 0.2)), value: caption)
                     }
                     .buttonStyle(.plain)
                 }
-                Spacer()
+                .frame(width: Metrics.nameWidth, alignment: .leading)
+                MeridianLaneView(
+                    lane: MeridianModel.lane(for: location, homeZone: homeZone, at: instant),
+                    theme: theme,
+                    showsMoonPhase: settings.showMoonPhase,
+                    onScrub: { raw, velocity in scrub(raw: raw, velocity: velocity) },
+                    onScrubEnded: { scrubDrag = nil }
+                )
                 VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 6) {
-                        if settings.showWeather, let weather = weatherStore.weather(for: location) {
-                            HStack(spacing: 3) {
-                                Image(systemName: weather.condition.symbolName)
-                                Text(weather.temperatureText(usesMetric: settings.usesMetricUnits))
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        Text(TimeFormatting.timeString(localTime, clockFormat: clockFormat))
-                            .font(.title3.monospacedDigit())
-                    }
-                    if let dateLabel {
-                        Text(dateLabel)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(time)
+                        .font(.system(size: 17, weight: .medium))
+                        .monospacedDigit()
+                        .tracking(-0.17)
+                        .lineLimit(1)
+                    secondaryTrailing(for: location, dateLabel: dateLabel, suffix: suffix)
                 }
-                .animation(settings.animation(.easeInOut(duration: 0.15)), value: dateLabel)
+                .frame(width: Metrics.timeWidth, alignment: .trailing)
             }
-            DayLineView(
-                dayLine: DayLineModel.dayLine(for: location, at: instant),
-                showsMoonPhase: settings.showMoonPhase,
-                onScrub: { raw, velocity in
-                    // The anchor day freezes at drag start so fractions past
-                    // the edge extrapolate stably (see TimeEngine.scrub).
-                    // Modifiers are read per event, so they work mid-drag.
-                    let modifiers = NSEvent.modifierFlags
-                    let drag = scrubDrag ?? (anchor: engine.globalInstant, previousRaw: raw, effective: raw)
-                    let effective = ScrubberLogic.effectiveDayFraction(
-                        raw: raw,
-                        previousRaw: drag.previousRaw,
-                        previousEffective: drag.effective,
-                        isPrecise: modifiers.contains(.shift)
-                    )
-                    scrubDrag = (drag.anchor, raw, effective)
-                    // Option disables snapping; Shift does too (precision
-                    // means exact minutes, and a fixed snap band would cost
-                    // five times the pointer travel to escape); fast drags
-                    // skip it so snapping stays imperceptible in motion.
-                    let snapping = modifiers.isDisjoint(with: [.option, .shift]) && velocity < 250
-                    engine.scrub(
-                        toDayFraction: effective,
-                        of: location,
-                        anchoredAt: drag.anchor,
-                        snapping: snapping
-                    )
-                },
-                onScrubEnded: { scrubDrag = nil }
-            )
             if state.inspectedLocationID == location.id {
                 inspectionDetails(for: location, at: instant)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.leading, Metrics.leadingPad)
+        .padding(.trailing, Metrics.trailingPad)
+        .padding(.vertical, 7)
+        .background(isSelected ? theme.selection : isHovered ? theme.hover : .clear)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            state.selectedLocationID = isSelected ? nil : location.id
+        }
         .onHover { hovering in
             if hovering {
                 hoveredLocationID = location.id
@@ -223,6 +369,57 @@ struct PanelContentView: View {
                 hoveredLocationID = nil
             }
         }
+    }
+
+    /// Date label (accent) when the city's civil date differs from home's,
+    /// otherwise the AM/PM suffix — plus the weather when enabled.
+    @ViewBuilder
+    private func secondaryTrailing(for location: Location, dateLabel: String?, suffix: String?) -> some View {
+        HStack(spacing: 4) {
+            if settings.showWeather, let weather = weatherStore.weather(for: location) {
+                HStack(spacing: 2) {
+                    Image(systemName: weather.condition.symbolName)
+                    Text(weather.temperatureText(usesMetric: settings.usesMetricUnits))
+                }
+                .foregroundStyle(theme.secondaryText)
+            }
+            if let dateLabel {
+                Text(dateLabel)
+                    .foregroundStyle(theme.accent)
+                    .fontWeight(.semibold)
+            } else if let suffix {
+                Text(suffix)
+                    .foregroundStyle(theme.secondaryText)
+            }
+        }
+        .font(.system(size: 10.5))
+        .lineLimit(1)
+        .animation(settings.animation(.easeInOut(duration: 0.15)), value: dateLabel)
+    }
+
+    /// One scrub path for every lane: the drag moves the meridian over HOME's
+    /// civil day. The anchor freezes at drag start so fractions past the edge
+    /// extrapolate stably; modifiers are read per event so they work mid-drag.
+    private func scrub(raw: Double, velocity: CGFloat) {
+        guard let home = store.home else { return }
+        let modifiers = NSEvent.modifierFlags
+        let drag = scrubDrag ?? (anchor: engine.globalInstant, previousRaw: raw, effective: raw)
+        let effective = ScrubberLogic.effectiveDayFraction(
+            raw: raw,
+            previousRaw: drag.previousRaw,
+            previousEffective: drag.effective,
+            isPrecise: modifiers.contains(.shift)
+        )
+        scrubDrag = (drag.anchor, raw, effective)
+        // Option disables snapping; Shift does too (precision means exact
+        // minutes); fast drags skip it so snapping stays imperceptible.
+        let snapping = modifiers.isDisjoint(with: [.option, .shift]) && velocity < 250
+        engine.scrub(
+            toDayFraction: effective,
+            of: home,
+            anchoredAt: drag.anchor,
+            snapping: snapping
+        )
     }
 
     /// Secondary info revealed by Return on the selected Location.
@@ -249,14 +446,15 @@ struct PanelContentView: View {
                 }
             }
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
+        .font(.system(size: 10.5))
+        .foregroundStyle(theme.secondaryText)
         .frame(maxWidth: .infinity, alignment: .leading)
         .transition(.opacity)
     }
 
     /// Relative Mode or UTC Mode caption; a click transiently shows both, and
-    /// hovering swaps in the Greeting for the simulated Local Time.
+    /// hovering swaps in the Greeting for the simulated Local Time. Home
+    /// always keeps its marker — it is the axis.
     private func offsetCaption(for location: Location, isHome: Bool, relativeOffset: RelativeOffset, at instant: Date) -> String {
         let relativeText = isHome ? "Home" : TimeFormatting.relativeOffset(seconds: relativeOffset.seconds)
         let utcText = TimeFormatting.utcOffset(seconds: location.timeZone.secondsFromGMT(for: instant))
@@ -272,11 +470,10 @@ struct PanelContentView: View {
            ) {
             return "\(greeting.text) · \(greeting.gloss)"
         }
-        if settings.offsetMode == .relative {
-            return relativeText
+        if isHome {
+            return "Home · \(utcText)"
         }
-        // Home keeps its marker in UTC Mode — it stays the reference point.
-        return isHome ? "\(relativeText) · \(utcText)" : utcText
+        return settings.offsetMode == .relative ? relativeText : utcText
     }
 
     private func revealBothOffsets(for id: Location.ID) {
@@ -290,18 +487,39 @@ struct PanelContentView: View {
     }
 
     private var addLocationFooter: some View {
-        Button {
-            state.isSearching = true
-        } label: {
-            Label("Add Location", systemImage: "plus")
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack {
+            Button {
+                state.isSearching = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text("+")
+                        .font(.system(size: 14))
+                        .frame(width: 18, height: 18)
+                        .background(theme.pill, in: Circle())
+                    Text("Add Location")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundStyle(theme.secondaryText)
                 .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            keyChip("A")
         }
-        .buttonStyle(.plain)
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(EdgeInsets(top: 8, leading: 14, bottom: 10, trailing: 14))
+        .overlay(alignment: .top) {
+            Rectangle().fill(theme.separator).frame(height: 1)
+        }
+        .padding(.top, 6)
+    }
+
+    private func keyChip(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(theme.tertiaryText)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.separator, lineWidth: 1))
     }
 
     // MARK: ⌘K command overlay
@@ -343,17 +561,17 @@ struct PanelContentView: View {
                     if let shortcut = command.shortcutLabel {
                         Text(shortcut)
                             .font(.caption.monospaced())
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(theme.tertiaryText)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                            .background(theme.pill, in: RoundedRectangle(cornerRadius: 4))
                     }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { onCommand(command) }
                 .listRowBackground(
                     index == highlighted
-                        ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.25))
+                        ? RoundedRectangle(cornerRadius: 6).fill(theme.selection)
                         : nil
                 )
             }
@@ -382,7 +600,7 @@ struct PanelContentView: View {
                 onMoveDown: onMoveDown
             )
             .padding(12)
-            Divider()
+            Rectangle().fill(theme.separator).frame(height: 1)
             List {
                 rows()
             }
@@ -392,7 +610,7 @@ struct PanelContentView: View {
             .overlay {
                 if isEmpty {
                     Text(emptyText)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
@@ -434,7 +652,7 @@ struct PanelContentView: View {
                     .background(HiddenListScrollers())
                 Text(countryName(for: city.country) ?? city.country)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.secondaryText)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -444,7 +662,7 @@ struct PanelContentView: View {
                 }
                 Text(city.timeZone)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(theme.tertiaryText)
             }
         }
         .padding(.vertical, 2)
@@ -453,13 +671,4 @@ struct PanelContentView: View {
     private func countryName(for code: String) -> String? {
         Locale.current.localizedString(forRegionCode: code)
     }
-
-    /// Home shows the resolved city with its country: "Tbilisi, Georgia".
-    private func homeTitle(for location: Location) -> String {
-        guard let code = location.country, let name = countryName(for: code) else {
-            return location.cityName
-        }
-        return "\(location.cityName), \(name)"
-    }
-
 }

@@ -16,3 +16,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = StatusItemController()
     }
 }
+
+

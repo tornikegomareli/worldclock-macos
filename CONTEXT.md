@@ -46,10 +46,10 @@ An optional personal name on a Location ("Sarah", "Techzy SF"). The City stays t
 The primary floating surface, anchored under the menu-bar icon, opened by click or global shortcut.
 
 **Globe**:
-The expanded 3D exploratory surface. Renders the same Global Instant as the Panel, including its sunlight terminator.
+The expanded 3D exploratory surface. Opens inside the Panel — the Panel widens in place and the lanes give way to the Earth. Renders the same Global Instant as the Panel, including its sunlight terminator.
 
 **Day Line**:
-A Location's horizontal 24-hour timeline: night is dark, daylight bright, with the time indicator (sun or moon-phase) at the Local Time.
+A Location's horizontal 24-hour timeline: night is dark, daylight bright, with the time indicator (sun or moon-phase). Since the Meridian layout, every Day Line is a lane on one shared axis — HOME's civil day — and a single meridian cursor crosses all lanes at the Global Instant, where each lane's indicator sits.
 _Avoid_: timeline, time bar
 
 **Relative Mode**:

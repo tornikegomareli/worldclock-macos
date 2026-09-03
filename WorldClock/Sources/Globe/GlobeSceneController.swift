@@ -62,6 +62,9 @@ final class GlobeSceneController {
         let camera = PerspectiveCamera()
         content.add(camera)
 
+        // Embedded in the Panel, the RealityView is torn down and rebuilt on
+        // every present — old marker entities belong to the previous content.
+        markers.removeAll()
         self.globe = globe
         self.halo = halo
         self.material = material
@@ -69,9 +72,18 @@ final class GlobeSceneController {
         self.content = content
         self.camera = camera
         positionCamera()
-        trackGlobalInstant()
-        trackMarkers()
+        updateSun(for: engine.globalInstant)
+        syncMarkers(with: store.locations)
+        if !isObserving {
+            isObserving = true
+            trackGlobalInstant()
+            trackMarkers()
+        }
     }
+
+    /// Observation chains re-arm themselves forever; arm them once, or every
+    /// rebuild would add a duplicate chain.
+    private var isObserving = false
 
     /// Re-renders the sun for every Global Instant change — ticking and
     /// scrubbing alike — via observation tracking.

@@ -14,8 +14,8 @@ final class PanelState {
     var isCommandSearching = false
     var commandQuery = ""
 
-    /// True while the Globe has taken over — rows scale outward and dim,
-    /// and animate back when the Globe returns.
+    /// True while the Globe has expanded in place of the lanes — the panel
+    /// widens and the list gives way to the Earth.
     var isGlobePresented = false
 
     var isAnyOverlayOpen: Bool { isSearching || isCommandSearching }
@@ -28,12 +28,13 @@ final class PanelState {
     }
 }
 
-/// Owns the floating Panel: opens it anchored under the status item, closes on focus loss.
+/// Owns the floating Panel: opens it anchored under the status item, closes on
+/// focus loss, and resizes it in place — for content changes and for the
+/// Globe expanding inside it.
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
-    static let panelSize = NSSize(width: 320, height: 360)
-
     private let panel: FloatingPanel
+    private let hosting: NSHostingController<PanelContentView>
     let engine = TimeEngine()
     let store = LocationsStore(storageDirectory: LocationsStore.liveStorageDirectory)
     private let state = PanelState()
@@ -43,38 +44,41 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let weatherStore = WeatherStore(provider: WeatherKitProvider())
     private let greetingProvider = try? GreetingProvider.loadBundled()
 
+    /// The Globe shares this controller's TimeEngine (ADR-0001) and lives
+    /// inside the Panel; the scene controller persists across presents so the
+    /// camera remembers its orientation.
+    private let globeScene: GlobeSceneController
+    private let globeState = GlobeState()
+
     /// Set by StatusItemController; ⌘K's Settings command opens its window.
     var openSettingsHandler: (() -> Void)?
 
-    /// The Globe shares this controller's TimeEngine (ADR-0001).
-    private(set) lazy var globeController: GlobeWindowController = {
-        let controller = GlobeWindowController(
-            engine: engine, store: store, settings: settings,
-            databaseLoader: databaseLoader,
-            onAddCity: { [weak self] city in self?.execute(.addLocation(city)) }
-        )
-        controller.onClose = { [weak self] in
-            guard let self, let button = statusButton?() else { return }
-            open(under: button)
-            withAnimation(settings.animation(.easeOut(duration: 0.2))) {
-                self.state.isGlobePresented = false
-            }
-        }
-        return controller
-    }()
-
-    /// How the Panel finds its anchor when the Globe hands control back.
-    var statusButton: (() -> NSStatusBarButton?)?
+    /// Where the Panel anchors — kept so in-place resizes stay under the
+    /// status item.
+    private var anchorFrame: NSRect?
+    private var anchorScreenFrame: NSRect?
 
     init(settings: SettingsStore) {
         self.settings = settings
         panel = FloatingPanel(
-            contentRect: NSRect(origin: .zero, size: Self.panelSize),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 560),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: true
         )
+        globeScene = GlobeSceneController(engine: engine, store: store)
+        var onCommand: (PanelCommand) -> Void = { _ in }
+        hosting = NSHostingController(
+            rootView: PanelContentView(
+                engine: engine, store: store, state: state,
+                databaseLoader: databaseLoader, settings: settings,
+                weatherStore: weatherStore, greetingProvider: greetingProvider,
+                globeScene: globeScene, globeState: globeState,
+                onCommand: { onCommand($0) }
+            )
+        )
         super.init()
+        onCommand = { [weak self] in self?.execute($0) }
         panel.delegate = self
         panel.isFloatingPanel = true
         panel.level = .popUpMenu
@@ -84,15 +88,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.transient, .ignoresCycle]
-        panel.contentViewController = NSHostingController(
-            rootView: PanelContentView(
-                engine: engine, store: store, state: state,
-                databaseLoader: databaseLoader, settings: settings,
-                weatherStore: weatherStore, greetingProvider: greetingProvider,
-                onCommand: { [weak self] in self?.execute($0) }
-            )
-        )
+        panel.contentViewController = hosting
         registerKeys()
+        trackContentSize()
         engine.startTicking()
         databaseLoader.load { [weak self] database in
             guard let self else { return }
@@ -112,42 +110,77 @@ final class PanelController: NSObject, NSWindowDelegate {
         keyRouter.bind(.escape) { [weak self] in self?.performEscapeStep() }
         keyRouter.bind(.upArrow) { [weak self] in self?.moveSelection(.up) }
         keyRouter.bind(.downArrow) { [weak self] in self?.moveSelection(.down) }
+        keyRouter.bind(.leftArrow) { [weak self] in self?.nudge(-1) }
+        keyRouter.bind(.rightArrow) { [weak self] in self?.nudge(1) }
         keyRouter.bind(.returnKey) { [weak self] in self?.toggleInspection() }
         keyRouter.bind(.delete) { [weak self] in self?.removeSelectedLocation() }
-        keyRouter.bind(.character("a")) { [weak self] in self?.state.isSearching = true }
+        keyRouter.bind(.character("a")) { [weak self] in
+            guard let self, !state.isGlobePresented else { return }
+            state.isSearching = true
+        }
         keyRouter.bind(.character("n")) { [weak self] in self?.returnToNowAnimated() }
         keyRouter.bind(.character("u")) { [weak self] in self?.toggleOffsetMode() }
+        keyRouter.bind(.character("j")) { [weak self] in
+            guard let self, state.isGlobePresented else { return }
+            globeState.isJumping = true
+        }
         keyRouter.bind(.commandCharacter("k")) { [weak self] in
-            self?.state.isCommandSearching = true
+            guard let self, !state.isGlobePresented else { return }
+            state.isCommandSearching = true
         }
-        keyRouter.bind(.character(" ")) { [weak self] in
-            self?.presentGlobe()
-        }
+        keyRouter.bind(.character(" ")) { [weak self] in self?.toggleGlobe() }
         panel.onKeyEvent = { [weak self] event in
             self?.keyRouter.handle(event) ?? false
         }
     }
 
-    /// The Panel half of the Panel↔Globe transition: rows translate outward
-    /// and dim, then the Globe expands out of the Panel's frame; closing
-    /// reverses both.
-    private func presentGlobe() {
-        guard !globeController.isVisible else {
-            globeController.close()
-            return
+    /// ←/→ nudge Time Travel by an hour (Shift: 15 minutes), clamped to the
+    /// same ±7 days scrubbing has.
+    private func nudge(_ direction: Double) {
+        guard !state.isAnyOverlayOpen else { return }
+        let fine = NSEvent.modifierFlags.contains(.shift)
+        let delta = direction * (fine ? 15 : 60) * 60
+        let target = ScrubberLogic.clamped(
+            engine.globalInstant.addingTimeInterval(delta),
+            around: engine.now
+        )
+        withAnimation(settings.animation(.easeOut(duration: 0.2))) {
+            engine.simulate(target)
         }
-        let frame = panel.frame
-        withAnimation(settings.animation(.easeOut(duration: 0.15))) {
-            state.isGlobePresented = true
+    }
+
+    // MARK: Globe — expands in place of the lanes.
+
+    private func toggleGlobe() {
+        setGlobePresented(!state.isGlobePresented)
+    }
+
+    private func setGlobePresented(_ presented: Bool) {
+        guard state.isGlobePresented != presented else { return }
+        if presented {
+            state.dismissOverlays()
+        } else {
+            globeState.cancelJump()
+            globeState.inspection = nil
+            globeScene.removeScrollZoomMonitor()
         }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(self.settings.prefersCrossfade ? 60 : 140))
-            self.panel.close()
-            self.globeController.open(from: frame)
+        withAnimation(settings.animation(.easeInOut(duration: 0.35))) {
+            state.isGlobePresented = presented
         }
     }
 
     private func performEscapeStep() {
+        if state.isGlobePresented {
+            switch globeState.escapeStep {
+            case .cancelJump:
+                globeState.cancelJump()
+            case .closeInspection:
+                globeState.inspection = nil
+            case .closeGlobe:
+                setGlobePresented(false)
+            }
+            return
+        }
         let step = PanelKeyLogic.escapeStep(
             isSearching: state.isAnyOverlayOpen,
             isInspecting: state.inspectedLocationID != nil,
@@ -169,7 +202,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func moveSelection(_ direction: PanelKeyLogic.SelectionDirection) {
-        guard !state.isAnyOverlayOpen else { return }
+        guard !state.isAnyOverlayOpen, !state.isGlobePresented else { return }
         let moved = PanelKeyLogic.movedSelection(
             from: state.selectedLocationID,
             by: direction,
@@ -184,7 +217,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func toggleInspection() {
-        guard let selected = state.selectedLocationID else { return }
+        guard !state.isGlobePresented, let selected = state.selectedLocationID else { return }
         setInspection(state.inspectedLocationID == selected ? nil : selected)
     }
 
@@ -196,7 +229,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func removeSelectedLocation() {
-        guard let id = state.selectedLocationID else { return }
+        guard !state.isGlobePresented, let id = state.selectedLocationID else { return }
         remove(locationID: id)
     }
 
@@ -244,7 +277,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         case let .removeLocation(location):
             remove(locationID: location.id)
         case .openGlobe:
-            presentGlobe()
+            toggleGlobe()
         case .switchToUTCMode:
             settings.offsetMode = .utc
         case .switchToRelativeMode:
@@ -265,6 +298,66 @@ final class PanelController: NSObject, NSWindowDelegate {
         withAnimation(settings.animation(.spring(duration: 0.4))) { engine.returnToNow() }
     }
 
+    // MARK: Sizing — the panel always fits its content, in place.
+
+    /// Resizes whenever anything that changes the content's height mutates:
+    /// the Location list, inspection, the overlays, or the Globe expanding.
+    private func trackContentSize() {
+        withObservationTracking { [weak self] in
+            guard let self else { return }
+            _ = store.locations.count
+            _ = state.inspectedLocationID
+            _ = state.isSearching
+            _ = state.isCommandSearching
+            _ = state.isGlobePresented
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.resizeToFit(animated: true)
+                self.trackContentSize()
+            }
+        }
+    }
+
+    private func fittingFrame() -> NSRect? {
+        guard let anchorFrame, let anchorScreenFrame else { return nil }
+        hosting.view.layoutSubtreeIfNeeded()
+        let fitting = hosting.view.fittingSize
+        let size = NSSize(
+            width: fitting.width,
+            height: min(max(fitting.height, 200), anchorScreenFrame.height - 20)
+        )
+        return PanelPlacement.frame(
+            anchoredUnder: anchorFrame,
+            panelSize: size,
+            screenFrame: anchorScreenFrame
+        )
+    }
+
+    private func resizeToFit(animated: Bool) {
+        guard panel.isVisible else { return }
+        // Let SwiftUI process the state change before measuring.
+        Task { @MainActor in
+            await Task.yield()
+            self.applyFittingFrame(animated: animated)
+        }
+    }
+
+    private func applyFittingFrame(animated: Bool) {
+        guard let frame = fittingFrame(), frame != panel.frame else { return }
+        if animated, settings.animationsEnabled, !settings.prefersCrossfade {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
+    }
+
+    // MARK: Presentation
+
     func toggle(under button: NSStatusBarButton) {
         if panel.isVisible {
             panel.close()
@@ -275,15 +368,14 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func open(under button: NSStatusBarButton) {
         guard let buttonWindow = button.window else { return }
-        let anchorFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        let screenFrame = buttonWindow.screen?.visibleFrame ?? .zero
-        let frame = PanelPlacement.frame(
-            anchoredUnder: anchorFrame,
-            panelSize: Self.panelSize,
-            screenFrame: screenFrame
-        )
-        panel.setFrame(frame, display: false)
+        anchorFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        anchorScreenFrame = buttonWindow.screen?.visibleFrame ?? .zero
+        if let frame = fittingFrame() {
+            panel.setFrame(frame, display: false)
+        }
         panel.makeKeyAndOrderFront(nil)
+        // Measured before display the first fit can be stale; settle it.
+        resizeToFit(animated: false)
         if settings.showWeather {
             // Fire-and-forget: weather never blocks or delays time rendering.
             let locations = store.locations
@@ -293,5 +385,13 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         panel.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // The Globe never survives a close: the panel reopens as the list.
+        globeScene.removeScrollZoomMonitor()
+        globeState.cancelJump()
+        globeState.inspection = nil
+        state.isGlobePresented = false
     }
 }

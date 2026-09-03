@@ -1,10 +1,10 @@
 import RealityKit
 import SwiftUI
 
-/// The Globe: the expanded 3D surface rendering the same Global Instant as
-/// the Panel, including its sunlight terminator (CONTEXT.md). Saved
-/// Locations appear as markers; clicking anywhere inspects the nearest City;
-/// J opens Jump.
+/// The Globe, expanded in place of the lanes: the 3D Earth rendering the same
+/// Global Instant as the header (CONTEXT.md), over a footer showing the
+/// selected place and the Jump affordance. Saved Locations appear as markers;
+/// clicking anywhere inspects the nearest City; J opens Jump.
 struct GlobeView: View {
     let controller: GlobeSceneController
     let engine: TimeEngine
@@ -12,6 +12,7 @@ struct GlobeView: View {
     let settings: SettingsStore
     let databaseLoader: CityDatabaseLoader
     @Bindable var state: GlobeState
+    let theme: PanelTheme
     /// Adds a City to the Location list (⌘K's add path — persists + animates).
     let onAddCity: (City) -> Void
 
@@ -19,7 +20,16 @@ struct GlobeView: View {
     @State private var hoverLabel: (text: String, position: CGPoint)?
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        VStack(spacing: 0) {
+            stage
+            footer
+        }
+    }
+
+    // MARK: Stage
+
+    private var stage: some View {
+        ZStack(alignment: .top) {
             RealityView { content in
                 do {
                     try controller.build(in: content)
@@ -58,15 +68,10 @@ struct GlobeView: View {
                 }
             }
             .onAppear { controller.installScrollZoomMonitor() }
-
-            if let inspection = state.inspection {
-                inspectorCard(for: inspection)
-                    .padding(14)
-            }
+            .onDisappear { controller.removeScrollZoomMonitor() }
 
             if state.isJumping {
                 jumpOverlay
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             if let hoverLabel {
@@ -111,59 +116,99 @@ struct GlobeView: View {
         }
     }
 
-    // MARK: Inspector
+    // MARK: Footer — the selected place (inspection, else Home) + Jump
 
-    private func inspectorCard(for inspection: GlobeInspection) -> some View {
-        let instant = engine.globalInstant
-        let localTime = LocalTime(of: instant, in: inspection.timeZone)
-        let utc = TimeFormatting.utcOffset(seconds: inspection.timeZone.secondsFromGMT(for: instant))
-        let homeZone = store.home?.timeZone ?? inspection.timeZone
-        let relative = TimeFormatting.relativeOffset(
-            seconds: RelativeOffset(of: inspection.timeZone, home: homeZone, at: instant).seconds
-        )
-        let sunset: String? = {
-            let probe = Location(
-                cityName: inspection.name, timeZone: inspection.timeZone,
-                latitude: inspection.latitude, longitude: inspection.longitude
-            )
-            guard case let .risesAndSets(_, _, sunsetDate, _) = DayLineModel.sunDay(for: probe, at: instant) else {
-                return nil
-            }
-            return TimeFormatting.timeString(
-                LocalTime(of: sunsetDate, in: inspection.timeZone),
-                clockFormat: settings.resolvedClockFormat
-            )
-        }()
+    private var footerInspection: GlobeInspection? {
+        state.inspection ?? store.home.map(GlobeInspection.init(location:))
+    }
 
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(inspection.name)
-                .font(.title3.weight(.semibold))
-            Text(TimeFormatting.timeString(localTime, clockFormat: settings.resolvedClockFormat))
-                .font(.system(size: 28, weight: .light).monospacedDigit())
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
-                GridRow {
-                    Text("Offset").foregroundStyle(.secondary)
-                    Text("\(relative) · \(utc)")
-                }
-                if let sunset {
-                    GridRow {
-                        Text("Sunset").foregroundStyle(.secondary)
-                        Text(sunset)
+    @ViewBuilder
+    private var footer: some View {
+        if let inspection = footerInspection {
+            let instant = engine.globalInstant
+            let localTime = LocalTime(of: instant, in: inspection.timeZone)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .lastTextBaseline, spacing: 8) {
+                        Text(inspection.name)
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(TimeFormatting.timeString(localTime, clockFormat: settings.resolvedClockFormat))
+                            .font(.system(size: 14, weight: .medium))
+                            .monospacedDigit()
                     }
+                    Text(meta(for: inspection, at: instant))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.secondaryText)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 0)
+                if let city = inspection.addableCity {
+                    Button {
+                        onAddCity(city)
+                    } label: {
+                        Text("Add to Clocks")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(theme.onAccent)
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .background(theme.accent, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    state.isJumping = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Jump to a city")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("J")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(theme.tertiaryText)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.separator, lineWidth: 1))
+                    }
+                    .padding(.leading, 10)
+                    .padding(.trailing, 6)
+                    .frame(height: 28)
+                    .background(theme.pill, in: RoundedRectangle(cornerRadius: 8))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
             }
-            .font(.callout)
-            if let city = inspection.addableCity {
-                Button("Add to Clocks") { onAddCity(city) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .padding(.top, 4)
+            .padding(EdgeInsets(top: 10, leading: 16, bottom: 12, trailing: 16))
+            .overlay(alignment: .top) {
+                Rectangle().fill(theme.separator).frame(height: 1)
             }
         }
-        .padding(14)
-        .frame(minWidth: 190, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .foregroundStyle(.primary)
+    }
+
+    /// "Home · UTC−7 · Sunset 7:14", or "+9h from home · UTC+9 · Sunset 17:32".
+    private func meta(for inspection: GlobeInspection, at instant: Date) -> String {
+        let utc = TimeFormatting.utcOffset(seconds: inspection.timeZone.secondsFromGMT(for: instant))
+        let homeZone = store.home?.timeZone ?? inspection.timeZone
+        let isHome = inspection.timeZone.identifier == store.home?.id
+        let relative: String = if isHome {
+            "Home"
+        } else {
+            TimeFormatting.relativeOffset(
+                seconds: RelativeOffset(of: inspection.timeZone, home: homeZone, at: instant).seconds
+            ) + " from home"
+        }
+        var parts = [relative, utc]
+        let probe = Location(
+            cityName: inspection.name, timeZone: inspection.timeZone,
+            latitude: inspection.latitude, longitude: inspection.longitude
+        )
+        if case let .risesAndSets(_, _, sunset, _) = DayLineModel.sunDay(for: probe, at: instant) {
+            let text = TimeFormatting.timeString(
+                LocalTime(of: sunset, in: inspection.timeZone),
+                clockFormat: settings.resolvedClockFormat
+            )
+            parts.append("Sunset \(text)")
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Jump
@@ -191,7 +236,7 @@ struct GlobeView: View {
                     HStack {
                         Text(city.name)
                         Spacer()
-                        Text(city.country).foregroundStyle(.secondary)
+                        Text(city.country).foregroundStyle(theme.secondaryText)
                     }
                     .contentShape(Rectangle())
                 }
@@ -202,7 +247,7 @@ struct GlobeView: View {
         }
         .frame(width: 320)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .padding(.top, 40)
+        .padding(.top, 24)
     }
 
     private func jump(to city: City) {

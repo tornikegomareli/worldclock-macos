@@ -11,6 +11,8 @@ final class PanelKeyRouter {
         case returnKey
         case upArrow
         case downArrow
+        case leftArrow
+        case rightArrow
         case character(Character)
         case commandCharacter(Character)
 
@@ -20,6 +22,8 @@ final class PanelKeyRouter {
         private static let returnKeyCode: UInt16 = 36
         private static let upArrowKeyCode: UInt16 = 126
         private static let downArrowKeyCode: UInt16 = 125
+        private static let leftArrowKeyCode: UInt16 = 123
+        private static let rightArrowKeyCode: UInt16 = 124
 
         static func from(_ event: NSEvent) -> Key? {
             switch event.keyCode {
@@ -28,6 +32,8 @@ final class PanelKeyRouter {
             case returnKeyCode: return .returnKey
             case upArrowKeyCode: return .upArrow
             case downArrowKeyCode: return .downArrow
+            case leftArrowKeyCode: return .leftArrow
+            case rightArrowKeyCode: return .rightArrow
             default:
                 guard let characters = event.charactersIgnoringModifiers?.lowercased(),
                       let character = characters.first,

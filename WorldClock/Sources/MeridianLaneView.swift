@@ -1,10 +1,13 @@
+import AppKit
 import SwiftUI
 
-/// Renders a DayLine: a capsule of night/twilight/day segments with the time
-/// indicator — a sun by day, a phase-correct moon by night. Custom paths, not
-/// emoji.
-struct DayLineView: View {
-    let dayLine: DayLine
+/// One Meridian lane: the Location's day rendered as a smooth
+/// night → twilight → day gradient on the shared home-time axis, with the
+/// sun/moon indicator at the meridian. Dragging anywhere on the lane scrubs
+/// the Global Instant.
+struct MeridianLaneView: View {
+    let lane: DayLine
+    let theme: PanelTheme
     /// When off, night shows a plain disc instead of the phase-correct moon.
     var showsMoonPhase: Bool = true
     /// Called with the drag's day fraction and pointer velocity (pt/s) while
@@ -13,33 +16,25 @@ struct DayLineView: View {
     /// Called when the drag ends, so the scrub anchor can be released.
     var onScrubEnded: (() -> Void)?
 
-    private static let nightColor = Color(red: 0.10, green: 0.12, blue: 0.25)
-    private static let twilightColor = Color(red: 0.80, green: 0.45, blue: 0.30)
-    private static let dayColor = Color(red: 0.99, green: 0.82, blue: 0.38)
-
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let indicatorRadius: CGFloat = 5.5
+            let indicatorRadius: CGFloat = 6
             ZStack(alignment: .leading) {
-                Canvas { context, size in
-                    let bar = CGRect(x: 0, y: size.height / 2 - 2, width: size.width, height: 4)
-                    context.clip(to: Path(roundedRect: bar, cornerRadius: 2))
-                    for segment in dayLine.segments {
-                        let rect = CGRect(
-                            x: segment.start * size.width,
-                            y: bar.minY,
-                            width: (segment.end - segment.start) * size.width,
-                            height: bar.height
-                        )
-                        context.fill(Path(rect), with: .color(color(for: segment.kind)))
-                    }
-                }
-
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(LinearGradient(
+                        stops: gradientStops,
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(.white.opacity(0.05), lineWidth: 1)
+                    )
                 indicatorView
                     .frame(width: indicatorRadius * 2, height: indicatorRadius * 2)
                     .position(
-                        x: min(max(dayLine.indicatorPosition * width, indicatorRadius), width - indicatorRadius),
+                        x: min(max(lane.indicatorPosition * width, indicatorRadius), width - indicatorRadius),
                         y: geometry.size.height / 2
                     )
             }
@@ -55,40 +50,67 @@ struct DayLineView: View {
                     }
             )
         }
-        .frame(height: 14)
+        .frame(height: 26)
     }
 
-    private func color(for kind: DayLine.SegmentKind) -> Color {
-        switch kind {
-        case .night: Self.nightColor
-        case .twilight: Self.twilightColor
-        case .day: Self.dayColor
+    /// Gradient stops from the lane's segments: night and day anchor their
+    /// span edges, twilight is a single stop at its midpoint, so every
+    /// transition blends smoothly instead of banding.
+    private var gradientStops: [Gradient.Stop] {
+        var stops: [Gradient.Stop] = []
+        var cursor = 0.0
+        func append(_ location: Double, _ color: Color) {
+            let clamped = min(max(location, cursor), 1)
+            cursor = clamped
+            stops.append(Gradient.Stop(color: color, location: clamped))
         }
+        for segment in lane.segments {
+            switch segment.kind {
+            case .night:
+                append(segment.start, theme.night)
+                append(segment.end, theme.night)
+            case .twilight:
+                append((segment.start + segment.end) / 2, theme.twilight)
+            case .day:
+                let pad = min(0.02, (segment.end - segment.start) / 4)
+                append(segment.start + pad, theme.day)
+                append(segment.end - pad, theme.day)
+            }
+        }
+        return stops
     }
 
     @ViewBuilder
     private var indicatorView: some View {
-        switch dayLine.indicator {
+        switch lane.indicator {
         case .sun:
             Circle()
-                .fill(Color(red: 1.0, green: 0.85, blue: 0.3))
-                .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
-                .shadow(color: Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.8), radius: 3)
+                .fill(RadialGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.96, blue: 0.82),
+                        Color(red: 1.0, green: 0.78, blue: 0.27),
+                        Color(red: 1.0, green: 0.66, blue: 0.16),
+                    ],
+                    center: UnitPoint(x: 0.4, y: 0.4),
+                    startRadius: 0,
+                    endRadius: 7
+                ))
+                .shadow(color: Color(red: 1.0, green: 0.75, blue: 0.27).opacity(0.7), radius: 3)
+                .shadow(color: Color(red: 1.0, green: 0.67, blue: 0.24).opacity(0.3), radius: 8)
         case let .moon(phase):
             ZStack {
                 Circle()
-                    .fill(Color(red: 0.16, green: 0.18, blue: 0.30))
+                    .fill(Color(red: 0.23, green: 0.26, blue: 0.4))
                 if showsMoonPhase {
                     MoonShape(phase: phase)
-                        .fill(Color(red: 0.92, green: 0.93, blue: 0.98))
+                        .fill(Color(red: 0.95, green: 0.96, blue: 0.99))
                 } else {
                     Circle()
                         .fill(Color(red: 0.55, green: 0.58, blue: 0.72))
                         .padding(2)
                 }
             }
-            .overlay(Circle().stroke(Color.white.opacity(0.5), lineWidth: 1))
-            .shadow(color: .black.opacity(0.4), radius: 2)
+            .shadow(color: Color(red: 0.78, green: 0.84, blue: 1.0).opacity(0.5), radius: 3)
         }
     }
 }
