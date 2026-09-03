@@ -7,15 +7,12 @@ import SwiftUI
 /// the Global Instant.
 struct MeridianLaneView: View {
     let lane: DayLine
-    /// The sun-altitude curve across the home day (degrees) — the shader's
-    /// input: sky palette, stars, sun arc, everything follows it.
+    /// The sun-altitude curve across the home day (degrees), driving the
+    /// shader's sky ramp, daylight wash, and star visibility.
     let altitudes: [Float]
-    /// Decorrelates the star field, clouds, and hills between lanes.
+    /// Decorrelates the star field between lanes.
     let starSeed: Float
-    /// Drives cloud drift and star twinkle; off = a still illustration.
-    let animates: Bool
-    /// Time Travel's amber grade over the scene [0, 1].
-    let tintStrength: Float
+    let theme: PanelTheme
     /// When off, night shows a plain disc instead of the phase-correct moon.
     var showsMoonPhase: Bool = true
     /// Called with the drag's day fraction and pointer velocity (pt/s) while
@@ -29,24 +26,20 @@ struct MeridianLaneView: View {
             let width = geometry.size.width
             let indicatorRadius: CGFloat = 6
             ZStack(alignment: .leading) {
-                TimelineView(.animation(minimumInterval: 1 / 20, paused: !animates)) { context in
-                    let time = Float(
-                        context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 86400)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.white)
+                    .colorEffect(ShaderLibrary.meridianLane(
+                        .float2(Float(geometry.size.width), Float(geometry.size.height)),
+                        .floatArray(altitudes),
+                        .color(theme.night),
+                        .color(theme.twilight),
+                        .color(theme.day),
+                        .float(starSeed)
+                    ))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(.white.opacity(0.05), lineWidth: 1)
                     )
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.white)
-                        .colorEffect(ShaderLibrary.meridianLane(
-                            .float2(Float(geometry.size.width), Float(geometry.size.height)),
-                            .floatArray(altitudes),
-                            .float(starSeed),
-                            .float(animates ? time : starSeed * 13),
-                            .float(tintStrength)
-                        ))
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(.white.opacity(0.05), lineWidth: 1)
-                )
                 indicatorView
                     .frame(width: indicatorRadius * 2, height: indicatorRadius * 2)
                     .position(
