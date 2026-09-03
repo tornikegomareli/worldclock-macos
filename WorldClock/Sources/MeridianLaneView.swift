@@ -7,6 +7,11 @@ import SwiftUI
 /// the Global Instant.
 struct MeridianLaneView: View {
     let lane: DayLine
+    /// The sun-altitude curve across the home day (degrees), driving the
+    /// shader's sky ramp, twilight band, and star visibility.
+    let altitudes: [Float]
+    /// Decorrelates the star field between lanes.
+    let starSeed: Float
     let theme: PanelTheme
     /// When off, night shows a plain disc instead of the phase-correct moon.
     var showsMoonPhase: Bool = true
@@ -22,10 +27,14 @@ struct MeridianLaneView: View {
             let indicatorRadius: CGFloat = 6
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(LinearGradient(
-                        stops: gradientStops,
-                        startPoint: .leading,
-                        endPoint: .trailing
+                    .fill(.white)
+                    .colorEffect(ShaderLibrary.meridianLane(
+                        .float2(Float(geometry.size.width), Float(geometry.size.height)),
+                        .floatArray(altitudes),
+                        .color(theme.night),
+                        .color(theme.twilight),
+                        .color(theme.day),
+                        .float(starSeed)
                     ))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
@@ -51,33 +60,6 @@ struct MeridianLaneView: View {
             )
         }
         .frame(height: 26)
-    }
-
-    /// Gradient stops from the lane's segments: night and day anchor their
-    /// span edges, twilight is a single stop at its midpoint, so every
-    /// transition blends smoothly instead of banding.
-    private var gradientStops: [Gradient.Stop] {
-        var stops: [Gradient.Stop] = []
-        var cursor = 0.0
-        func append(_ location: Double, _ color: Color) {
-            let clamped = min(max(location, cursor), 1)
-            cursor = clamped
-            stops.append(Gradient.Stop(color: color, location: clamped))
-        }
-        for segment in lane.segments {
-            switch segment.kind {
-            case .night:
-                append(segment.start, theme.night)
-                append(segment.end, theme.night)
-            case .twilight:
-                append((segment.start + segment.end) / 2, theme.twilight)
-            case .day:
-                let pad = min(0.02, (segment.end - segment.start) / 4)
-                append(segment.start + pad, theme.day)
-                append(segment.end - pad, theme.day)
-            }
-        }
-        return stops
     }
 
     @ViewBuilder

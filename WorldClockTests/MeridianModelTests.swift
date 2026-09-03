@@ -102,6 +102,20 @@ struct MeridianModelTests {
         }
     }
 
+    /// The altitude curve behind the lane shader: winter London is well up at
+    /// its own noon, deep below the horizon at midnight; Tokyo's peak lands in
+    /// London's early morning (its noon is 3 AM home time).
+    @Test func sunAltitudesFollowTheHomeAxis() {
+        let londonCurve = MeridianModel.sunAltitudes(for: london, homeZone: homeZone, at: instant)
+        #expect(londonCurve.count == 25)
+        #expect(londonCurve[12] > 5)
+        #expect(londonCurve[0] < -30)
+
+        let tokyoCurve = MeridianModel.sunAltitudes(for: tokyo, homeZone: homeZone, at: instant)
+        let peak = tokyoCurve.firstIndex(of: tokyoCurve.max() ?? 0) ?? -1
+        #expect((2...5).contains(peak), "Tokyo peak at index \(peak)")
+    }
+
     @Test func polarNightLaneIsAllNight() {
         let longyearbyen = Location(
             cityName: "Longyearbyen", timeZone: TimeZone(identifier: "Arctic/Longyearbyen")!,

@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 /// The Meridian layout: every Location's lane shares one 24-hour axis — the
 /// HOME civil day containing the Global Instant — and a single meridian
@@ -79,5 +80,29 @@ enum MeridianModel {
             indicatorPosition: meridian,
             indicator: isDaytime ? .sun : .moon(phase: Astronomy.moonPhase(at: instant))
         )
+    }
+
+    /// The location's sun altitude (degrees) sampled across the home civil
+    /// day — the lane shader's input curve. A Location without coordinates
+    /// degrades to an equatorial point at its zone's mean solar longitude,
+    /// matching DayLineModel.sunDay.
+    static func sunAltitudes(
+        for location: Location, homeZone: TimeZone, at instant: Date, samples: Int = 25
+    ) -> [Float] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = homeZone
+        let start = calendar.startOfDay(for: instant)
+        let end = calendar.startOfDay(for: start.addingTimeInterval(36 * 3600))
+        let seconds = end.timeIntervalSince(start)
+        let offsetHours = Double(location.timeZone.secondsFromGMT(for: instant)) / 3600
+        let position = GlobeMath.unitPosition(
+            latitude: location.latitude ?? 0,
+            longitude: location.longitude ?? offsetHours * 15
+        )
+        return (0..<samples).map { sample in
+            let time = start.addingTimeInterval(Double(sample) / Double(samples - 1) * seconds)
+            let dot = simd_dot(GlobeMath.sunDirection(at: time), position)
+            return Float(asin(Double(min(max(dot, -1), 1))) * 180 / .pi)
+        }
     }
 }

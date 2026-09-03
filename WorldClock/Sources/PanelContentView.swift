@@ -335,6 +335,8 @@ struct PanelContentView: View {
                 .frame(width: Metrics.nameWidth, alignment: .leading)
                 MeridianLaneView(
                     lane: MeridianModel.lane(for: location, homeZone: homeZone, at: instant),
+                    altitudes: MeridianModel.sunAltitudes(for: location, homeZone: homeZone, at: instant),
+                    starSeed: starSeed(for: location),
                     theme: theme,
                     showsMoonPhase: settings.showMoonPhase,
                     onScrub: { raw, velocity in scrub(raw: raw, velocity: velocity) },
@@ -395,6 +397,12 @@ struct PanelContentView: View {
         .font(.system(size: 10.5))
         .lineLimit(1)
         .animation(settings.animation(.easeInOut(duration: 0.15)), value: dateLabel)
+    }
+
+    /// A stable per-city star-field seed (String.hashValue is randomized per
+    /// launch, so sum scalars instead — stars shouldn't move between opens).
+    private func starSeed(for location: Location) -> Float {
+        Float(location.id.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 997 })
     }
 
     /// One scrub path for every lane: the drag moves the meridian over HOME's
