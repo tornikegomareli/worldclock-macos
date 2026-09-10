@@ -1,12 +1,6 @@
 <h1 align="center">WorldClock</h1>
 
-<h3 align="center">Time zones at a glance, right from your Mac’s menu bar.</h3>
-
-<p align="center">
-  macOS 15+ · Apple Silicon &amp; Intel · <a href="LICENSE">MIT License</a>
-</p>
-
-## Showcase
+<h3 align="center">Time zones at a glance.</h3>
 
 <p align="center">
   <a href="docs/media/worldclock-demo.mp4">
