@@ -14,11 +14,12 @@
   </a>
 </p>
 
-[Watch the full demo](docs/media/worldclock-demo.mp4).
+<br />
 
 <p align="center">
-  <img src="docs/images/clocks-panel.png" width="45%" alt="City clocks, daylight strips, and weather in WorldClock" />
-  <img src="docs/images/world-view.png" width="45%" alt="WorldClock’s globe focused on Tbilisi" />
+  <img src="docs/images/clocks-panel.png" height="400" alt="City clocks, daylight strips, and weather in WorldClock" />
+  &nbsp;&nbsp;
+  <img src="docs/images/world-view.png" height="400" alt="WorldClock’s globe focused on Tbilisi" />
 </p>
 
 ## Install
