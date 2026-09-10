@@ -3,8 +3,12 @@
 <h3 align="center">Time zones at a glance.</h3>
 
 <p align="center">
-  <a href="docs/media/worldclock-demo.mp4">
-    <img src="docs/media/worldclock-demo.gif" width="90%" alt="WorldClock demo: comparing city times and exploring the globe" />
+  <a href="[docs/media/worldclock-demo.mp4](https://getworldclock.app/#top)">
+    
+
+https://github.com/user-attachments/assets/513ebe21-b60d-44fa-ac0f-4135f612e2d5
+
+
   </a>
 </p>
 
