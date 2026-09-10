@@ -3,6 +3,10 @@ import Foundation
 /// Pure keyboard policy for the Panel — selection stepping and the Esc
 /// walk-back order. The event routing that invokes it lives in the shell.
 enum PanelKeyLogic {
+    static func movedResultSelection(from current: Int, by delta: Int, count: Int) -> Int {
+        min(max(current + delta, 0), max(count - 1, 0))
+    }
+
     enum SelectionDirection {
         case up
         case down

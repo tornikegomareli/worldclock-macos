@@ -3,7 +3,8 @@ import Observation
 
 /// What the Globe inspector shows for a picked place — a saved Location or
 /// any City. All values derive from the shared Global Instant at render time.
-struct GlobeInspection: Equatable {
+struct GlobeInspection: Equatable, Identifiable {
+    var id: String { "\(name)|\(latitude)|\(longitude)" }
     let name: String
     let countryCode: String?
     let timeZone: TimeZone
@@ -11,6 +12,15 @@ struct GlobeInspection: Equatable {
     let longitude: Double
     /// Present when the place isn't saved yet — powers "Add to Clocks".
     let addableCity: City?
+
+    func savedLocation(in locations: [Location]) -> Location? {
+        locations.first { $0.id == timeZone.identifier }
+    }
+
+    func isHome(_ home: Location?) -> Bool {
+        guard let home else { return false }
+        return name == home.cityName && timeZone.identifier == home.id
+    }
 
     init(location: Location) {
         name = location.cityName
@@ -38,18 +48,20 @@ struct GlobeInspection: Equatable {
 @MainActor
 @Observable
 final class GlobeState {
+    var isFlying = false
+    var hasArrived = false
     var inspection: GlobeInspection?
     var isJumping = false
     var jumpQuery = ""
-    var hoveredLocationID: Location.ID?
+    var jumpSelection = 0
 
     func cancelJump() {
         isJumping = false
         jumpQuery = ""
+        jumpSelection = 0
     }
 
-    /// Esc inside the Globe walks back: Jump overlay → inspector → nil
-    /// (meaning: close the window).
+    /// Esc inside the Globe walks back: Jump overlay → inspector → locations.
     enum EscapeStep {
         case cancelJump
         case closeInspection

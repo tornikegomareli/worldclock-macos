@@ -6,6 +6,16 @@ import Testing
 /// order. Pure functions — the key routing itself is shell.
 @Suite("PanelKeyLogic")
 struct PanelKeyLogicTests {
+    @Test("Search selection steps through results and clamps for empty or shorter results")
+    func searchSelection() {
+        #expect(PanelKeyLogic.movedResultSelection(from: 0, by: 1, count: 5) == 1)
+        #expect(PanelKeyLogic.movedResultSelection(from: 2, by: -1, count: 5) == 1)
+        #expect(PanelKeyLogic.movedResultSelection(from: 0, by: -1, count: 5) == 0)
+        #expect(PanelKeyLogic.movedResultSelection(from: 4, by: 1, count: 5) == 4)
+        #expect(PanelKeyLogic.movedResultSelection(from: 4, by: 1, count: 0) == 0)
+        #expect(PanelKeyLogic.movedResultSelection(from: 4, by: 1, count: 2) == 1)
+    }
+
     let locations = [
         Location(cityName: "Tbilisi", timeZone: TimeZone(identifier: "Asia/Tbilisi")!),
         Location(cityName: "London", timeZone: TimeZone(identifier: "Europe/London")!),

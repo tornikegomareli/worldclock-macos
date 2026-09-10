@@ -15,3 +15,20 @@ xcuserdata/
 *.xcworkspace
 Derived/
 .tuist-cache/
+
+# Release credentials and generated artifacts
+.private/
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.key
+*.pem
+*.provisionprofile
+*.mobileprovision
+release-output/
+node_modules/
+
+# Retired prototype; the active landing page is a separate project.
+/website/

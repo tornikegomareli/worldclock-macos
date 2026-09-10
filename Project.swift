@@ -9,12 +9,22 @@ let project = Project(
         .remote(
             url: "https://github.com/sindresorhus/KeyboardShortcuts",
             requirement: .upToNextMajor(from: "2.0.0")
+        ),
+        .remote(
+            url: "https://github.com/sparkle-project/Sparkle",
+            requirement: .exact("2.9.6")
         )
     ],
     settings: .settings(
         base: [
             "SWIFT_VERSION": "6.0",
             "CODE_SIGN_IDENTITY": "-",
+            "MARKETING_VERSION": "0.1.0",
+            "CURRENT_PROJECT_VERSION": "1",
+            "SPARKLE_PUBLIC_KEY": "",
+            "WORLD_CLOCK_WEATHERKIT_ENTITLEMENTS": "",
+            "WORLD_CLOCK_WEATHERKIT_PROFILE": "",
+            "ENABLE_HARDENED_RUNTIME": "YES",
         ]
     ),
     targets: [
@@ -26,8 +36,18 @@ let project = Project(
             deploymentTargets: .macOS("15.0"),
             infoPlist: .extendingDefault(with: [
                 "LSUIElement": true,
-                "NSLocationUsageDescription": "WorldClock keeps your Home Location on the nearest city while you travel. Your location never leaves this Mac.",
-                "NSLocationWhenInUseUsageDescription": "WorldClock keeps your Home Location on the nearest city while you travel. Your location never leaves this Mac.",
+                "LSApplicationCategoryType": "public.app-category.utilities",
+                "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+                "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+                "SUFeedURL": "https://github.com/tornikegomareli/worldclock-macos/releases/latest/download/appcast.xml",
+                "SUPublicEDKey": "$(SPARKLE_PUBLIC_KEY)",
+                "SUEnableAutomaticChecks": false,
+                "SUAutomaticallyUpdate": false,
+                "SUEnableSystemProfiling": false,
+                "SURequireSignedFeed": true,
+                "SUVerifyUpdateBeforeExtraction": true,
+                "NSLocationUsageDescription": "WorldClock uses your location to choose the nearest Home city. If weather is enabled, that city's coordinates are sent to Apple Weather.",
+                "NSLocationWhenInUseUsageDescription": "WorldClock uses your location to choose the nearest Home city. If weather is enabled, that city's coordinates are sent to Apple Weather.",
             ]),
             buildableFolders: [
                 "WorldClock/Sources",
@@ -36,7 +56,13 @@ let project = Project(
             dependencies: [
                 .external(name: "Dependencies"),
                 .package(product: "KeyboardShortcuts"),
-            ]
+                .package(product: "Sparkle"),
+            ],
+            settings: .settings(base: [
+                "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "",
+                "CODE_SIGN_ENTITLEMENTS": "$(WORLD_CLOCK_WEATHERKIT_ENTITLEMENTS)",
+                "PROVISIONING_PROFILE_SPECIFIER": "$(WORLD_CLOCK_WEATHERKIT_PROFILE)",
+            ])
         ),
         .target(
             name: "WorldClockTests",

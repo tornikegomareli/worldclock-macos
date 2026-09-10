@@ -13,6 +13,7 @@ import SwiftUI
 final class GlobeSceneController {
     private let engine: TimeEngine
     private let store: LocationsStore
+    private let state: GlobeState
 
     private var globe: ModelEntity?
     private var halo: ModelEntity?
@@ -28,35 +29,77 @@ final class GlobeSceneController {
     private var dragStart: (yaw: Double, pitch: Double)?
     private var magnifyStartDistance: Double?
     private var scrollMonitor: Any?
+    var isPointerOverGlobe = false
+    private var inspectionMarker: ModelEntity?
 
-    init(engine: TimeEngine, store: LocationsStore) {
+    init(engine: TimeEngine, store: LocationsStore, state: GlobeState) {
         self.engine = engine
         self.store = store
+        self.state = state
     }
 
-    func build(in content: RealityViewCameraContent) throws {
+    @MainActor
+    struct Resources {
+        let surface: CustomMaterial
+        let atmosphere: CustomMaterial
+        let globeMesh: MeshResource
+        let haloMesh: MeshResource
+    }
+
+    private var preparationTask: Task<Resources, Error>?
+
+    /// Start before World View is requested; simultaneous opens share this work.
+    func prewarm() {
+        Task(priority: .utility) { try? await prepareResources() }
+    }
+
+    func prepareResources() async throws -> Resources {
+        if let preparationTask { return try await preparationTask.value }
+        let task = Task { try await Self.loadResources() }
+        preparationTask = task
+        do {
+            return try await task.value
+        } catch {
+            // A failed prewarm must not prevent a later opening from retrying.
+            preparationTask = nil
+            throw error
+        }
+    }
+
+    private static func loadResources() async throws -> Resources {
         guard let device = MTLCreateSystemDefaultDevice(),
               let library = device.makeDefaultLibrary()
         else { throw GlobeError.metalUnavailable }
 
         let surfaceShader = CustomMaterial.SurfaceShader(named: "globeSurface", in: library)
         var material = try CustomMaterial(surfaceShader: surfaceShader, lightingModel: .unlit)
-        material.baseColor.texture = .init(try Self.loadTexture("earth-day", "jpg", semantic: .color))
-        material.emissiveColor.texture = .init(try Self.loadTexture("earth-night", "jpg", semantic: .color))
-        material.custom.texture = .init(try Self.loadTexture("water-mask", "png", semantic: .raw))
+        material.emissiveColor.texture = .init(try await Self.loadTexture("earth-night", "jpg", semantic: .color))
+        material.custom.texture = .init(try await Self.loadTexture("water-mask", "png", semantic: .raw))
+        // Spare scalar slot carries linear elevation data for stylized relief.
+        material.roughness.texture = .init(try await Self.loadTexture("earth-elevation", "jpg", semantic: .raw))
         material.custom.value = SIMD4(1, 0, 0, 0)
-
-        let globe = ModelEntity(mesh: .generateSphere(radius: 1), materials: [material])
-        globe.components.set(CollisionComponent(shapes: [.generateSphere(radius: 1)]))
-        globe.components.set(InputTargetComponent())
-        content.add(globe)
 
         let atmosphereShader = CustomMaterial.SurfaceShader(named: "atmosphereSurface", in: library)
         var atmosphere = try CustomMaterial(surfaceShader: atmosphereShader, lightingModel: .unlit)
         atmosphere.blending = .transparent(opacity: 1.0)
         atmosphere.faceCulling = .back
         atmosphere.custom.value = SIMD4(1, 0, 0, 0)
-        let halo = ModelEntity(mesh: .generateSphere(radius: 1.04), materials: [atmosphere])
+        return Resources(
+            surface: material, atmosphere: atmosphere,
+            globeMesh: .generateSphere(radius: 1), haloMesh: .generateSphere(radius: 1.012)
+        )
+    }
+
+    func build(in content: RealityViewCameraContent) async throws {
+        let resources = try await prepareResources()
+        try Task.checkCancellation()
+        let material = resources.surface
+        let atmosphere = resources.atmosphere
+        let globe = ModelEntity(mesh: resources.globeMesh, materials: [material])
+        globe.components.set(CollisionComponent(shapes: [.generateSphere(radius: 1)]))
+        globe.components.set(InputTargetComponent())
+        content.add(globe)
+        let halo = ModelEntity(mesh: resources.haloMesh, materials: [atmosphere])
         globe.addChild(halo)
 
         let camera = PerspectiveCamera()
@@ -70,7 +113,14 @@ final class GlobeSceneController {
         self.material = material
         self.atmosphereMaterial = atmosphere
         self.content = content
+        if self.camera == nil, let home = store.home,
+           let latitude = home.latitude, let longitude = home.longitude {
+            let angles = GlobeMath.cameraAngles(latitude: latitude, longitude: longitude)
+            yaw = angles.yaw
+            pitch = angles.pitch
+        }
         self.camera = camera
+        inspectionMarker = nil
         positionCamera()
         updateSun(for: engine.globalInstant)
         syncMarkers(with: store.locations)
@@ -167,6 +217,23 @@ final class GlobeSceneController {
             let facing = simd_dot(simd_normalize(marker.position), cameraDirection)
             marker.isEnabled = facing > 0.05
         }
+        if let inspectionMarker {
+            inspectionMarker.isEnabled = simd_dot(simd_normalize(inspectionMarker.position), cameraDirection) > 0.05
+        }
+    }
+
+    func markInspection(_ inspection: GlobeInspection?) {
+        inspectionMarker?.removeFromParent()
+        inspectionMarker = nil
+        guard let inspection, let globe else { return }
+        let marker = ModelEntity(
+            mesh: .generateSphere(radius: 0.018),
+            materials: [UnlitMaterial(color: .systemOrange)]
+        )
+        marker.position = GlobeMath.unitPosition(latitude: inspection.latitude, longitude: inspection.longitude) * 1.015
+        globe.addChild(marker)
+        inspectionMarker = marker
+        updateMarkerVisibility()
     }
 
     /// Hover feedback: the hovered marker grows and warms.
@@ -214,27 +281,35 @@ final class GlobeSceneController {
 
     private var flyTask: Task<Void, Never>?
 
-    /// Rotates the camera to face a coordinate along the shortest arc.
-    func fly(toLatitude latitude: Double, longitude: Double) {
+    /// A cancellable departure, rotation, and approach, timed independently of frame rate.
+    func fly(toLatitude latitude: Double, longitude: Double, animated: Bool = true) {
+        cancelFlight()
+        dragStart = nil
+        magnifyStartDistance = nil
         let target = GlobeMath.cameraAngles(latitude: latitude, longitude: longitude)
-        var deltaYaw = (target.yaw - yaw).truncatingRemainder(dividingBy: 2 * .pi)
-        if deltaYaw > .pi { deltaYaw -= 2 * .pi }
-        if deltaYaw < -.pi { deltaYaw += 2 * .pi }
-        let startYaw = yaw
-        let startPitch = pitch
-        let deltaPitch = target.pitch - pitch
-
-        flyTask?.cancel()
+        let start = (yaw: yaw, pitch: pitch, distance: distance)
+        let duration = GlobeMath.flightDuration(from: start, to: target)
+        guard animated, duration > 0 else {
+            (yaw, pitch, distance) = GlobeMath.flightPose(from: start, to: target, progress: 1)
+            positionCamera()
+            state.hasArrived = true
+            return
+        }
+        state.isFlying = true
         flyTask = Task { @MainActor [weak self] in
-            let steps = 40
-            for step in 1...steps {
+            let started = ProcessInfo.processInfo.systemUptime
+            while true {
                 guard let self, !Task.isCancelled else { return }
-                let t = Double(step) / Double(steps)
-                let eased = t * t * (3 - 2 * t) // smoothstep
-                yaw = startYaw + deltaYaw * eased
-                pitch = startPitch + deltaPitch * eased
+                let t = min((ProcessInfo.processInfo.systemUptime - started) / duration, 1)
+                (yaw, pitch, distance) = GlobeMath.flightPose(from: start, to: target, progress: t)
                 positionCamera()
-                try? await Task.sleep(for: .milliseconds(14))
+                if t >= 1 {
+                    state.isFlying = false
+                    state.hasArrived = true
+                    flyTask = nil
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(8))
             }
         }
     }
@@ -242,6 +317,7 @@ final class GlobeSceneController {
     // MARK: Camera
 
     func orbit(by translation: CGSize) {
+        cancelFlight()
         let start = dragStart ?? (yaw, pitch)
         dragStart = start
         yaw = start.yaw - Double(translation.width) * 0.006
@@ -254,6 +330,7 @@ final class GlobeSceneController {
     }
 
     func magnify(to magnification: CGFloat) {
+        cancelFlight()
         let start = magnifyStartDistance ?? distance
         magnifyStartDistance = start
         distance = min(max(start / Double(magnification), 1.3), 8)
@@ -262,6 +339,19 @@ final class GlobeSceneController {
 
     func endMagnify() {
         magnifyStartDistance = nil
+    }
+
+    func cancelFlight() {
+        flyTask?.cancel()
+        flyTask = nil
+        state.isFlying = false
+        state.hasArrived = false
+    }
+
+    func zoom(by factor: Double) {
+        cancelFlight()
+        distance = min(max(distance * factor, 1.3), 8)
+        positionCamera()
     }
 
     func removeScrollZoomMonitor() {
@@ -274,11 +364,10 @@ final class GlobeSceneController {
     func installScrollZoomMonitor() {
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self else { return event }
+            guard let self, self.isPointerOverGlobe else { return event }
             MainActor.assumeIsolated {
                 let delta = Double(event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 8)
-                self.distance = min(max(self.distance * (1 - delta * 0.005), 1.3), 8)
-                self.positionCamera()
+                self.zoom(by: 1 - delta * 0.005)
             }
             return event
         }
@@ -297,11 +386,11 @@ final class GlobeSceneController {
 
     private static func loadTexture(
         _ name: String, _ ext: String, semantic: TextureResource.Semantic
-    ) throws -> TextureResource {
+    ) async throws -> TextureResource {
         guard let url = Bundle.main.url(forResource: name, withExtension: ext) else {
             throw GlobeError.missingTexture(name)
         }
-        return try TextureResource.load(contentsOf: url, options: .init(semantic: semantic))
+        return try await TextureResource(contentsOf: url, options: .init(semantic: semantic))
     }
 
     enum GlobeError: Error {

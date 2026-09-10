@@ -1,0 +1,14 @@
+Earth imagery: NASA Earth Observatory (Blue Marble, Black Marble).
+
+Stylized terrain: Jesse Allen, NASA Earth Observatory, using GEBCO data
+produced by the British Oceanographic Data Centre.
+
+earth-elevation.jpg is the unmodified 5400 × 2700 Blue Marble elevation
+map, with grayscale values representing 0–6400 metres. The app uses it
+for exaggerated shaded relief, not surveyed terrain or navigation.
+
+Source:
+https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/topography-bathymetry-maps/
+
+Original asset:
+https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/topography/gebco_08_rev_elev_5400x2700.jpg

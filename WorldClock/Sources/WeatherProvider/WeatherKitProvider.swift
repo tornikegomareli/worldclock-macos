@@ -12,7 +12,8 @@ struct WeatherKitProvider: WeatherProvider {
         )
         return Weather(
             condition: Self.condition(from: current.condition),
-            temperatureCelsius: current.temperature.converted(to: .celsius).value
+            temperatureCelsius: current.temperature.converted(to: .celsius).value,
+            isDaylight: current.isDaylight
         )
     }
 

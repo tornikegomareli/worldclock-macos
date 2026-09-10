@@ -2,24 +2,52 @@ import AppKit
 import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The Settings window: small tabs, no giant preferences surface.
+/// A persistent sidebar keeps every Settings section directly accessible.
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
     let store: LocationsStore
+    @Bindable var updates: UpdateService
+    @State private var selectedSection: SettingsSection? = .general
 
     var body: some View {
-        TabView {
-            generalTab.tabItem { Label("General", systemImage: "gearshape") }
-            timeTab.tabItem { Label("Time", systemImage: "clock") }
-            appearanceTab.tabItem { Label("Appearance", systemImage: "sparkles") }
-            locationsTab.tabItem { Label("Locations", systemImage: "list.bullet") }
-            advancedTab.tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
-            aboutTab.tabItem { Label("About", systemImage: "info.circle") }
+        HStack(spacing: 0) {
+            List(SettingsSection.allCases, selection: $selectedSection) { section in
+                Label(section.rawValue, systemImage: section.systemImage)
+                    .padding(.vertical, 5)
+                    .tag(section)
+            }
+            .listStyle(.sidebar)
+            .accessibilityLabel("Settings sections")
+            .frame(width: 170)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text((selectedSection ?? .general).rawValue)
+                    .font(.title2.weight(.semibold))
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+
+                ScrollView {
+                    sectionContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .id(selectedSection)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 440)
-        .padding(.bottom, 12)
+        .frame(width: 700, height: 440)
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch selectedSection ?? .general {
+        case .general: generalTab
+        case .time: timeTab
+        case .appearance: appearanceTab
+        case .about: aboutTab
+        }
     }
 
     // MARK: General
@@ -30,7 +58,7 @@ struct SettingsView: View {
             KeyboardShortcuts.Recorder("Toggle Panel:", name: .togglePanel)
             LabeledContent("Home:", value: store.home?.cityName ?? "—")
             Toggle("Automatically update Home location", isOn: $settings.autoUpdateHome)
-                .help("Keeps Home on the nearest city while you travel. Asks for location permission; your location never leaves this Mac.")
+                .help("Keeps Home on the nearest city while you travel. If weather is enabled, the city's coordinates are sent to Apple Weather.")
             Picker("Menu bar shows:", selection: $settings.menuBarLocationID) {
                 Text("Icon only").tag(String?.none)
                 ForEach(store.locations) { location in
@@ -58,11 +86,6 @@ struct SettingsView: View {
             }
             .pickerStyle(.radioGroup)
 
-            Picker("First day of week:", selection: $settings.firstDayOfWeek) {
-                Text("System").tag(FirstDayOfWeek.system)
-                Text("Monday").tag(FirstDayOfWeek.monday)
-                Text("Sunday").tag(FirstDayOfWeek.sunday)
-            }
         }
         .padding(20)
     }
@@ -79,76 +102,6 @@ struct SettingsView: View {
         .padding(20)
     }
 
-    // MARK: Locations
-
-    private var locationsTab: some View {
-        VStack(spacing: 8) {
-            Text("Locations are managed in the Panel.")
-            Text("Personal labels (\u{201C}Sarah\u{201D}, \u{201C}Techzy SF\u{201D}) arrive in a later release.")
-                .foregroundStyle(.secondary)
-                .font(.callout)
-        }
-        .padding(30)
-    }
-
-    // MARK: Advanced
-
-    @State private var confirmingReset = false
-
-    private var advancedTab: some View {
-        Form {
-            LabeledContent("Configuration:") {
-                HStack {
-                    Button("Export…") { exportConfiguration() }
-                    Button("Import…") { importConfiguration() }
-                }
-            }
-            LabeledContent("Data:") {
-                Button("Reset All Data…", role: .destructive) { confirmingReset = true }
-            }
-        }
-        .padding(20)
-        .confirmationDialog(
-            "Reset all data?",
-            isPresented: $confirmingReset
-        ) {
-            Button("Reset", role: .destructive) {
-                store.resetToSeed()
-                settings.restore(
-                    SettingsSnapshot(
-                        offsetMode: .relative, clockFormatPreference: .system,
-                        showWeather: true, showGreetings: true, showMoonPhase: true,
-                        animationsEnabled: true, firstDayOfWeek: .system,
-                        autoUpdateHome: false, menuBarLocationID: nil
-                    )
-                )
-            }
-        } message: {
-            Text("Locations return to the defaults and every preference resets.")
-        }
-    }
-
-    private func exportConfiguration() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "WorldClock Configuration.json"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let file = ConfigurationFile(locations: store.locations, settings: settings.snapshot)
-        try? file.encoded().write(to: url)
-    }
-
-    private func importConfiguration() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url,
-              let data = try? Data(contentsOf: url),
-              let file = try? ConfigurationFile(decoding: data)
-        else { return }
-        store.replaceAll(with: file.locations)
-        settings.restore(file.settings)
-    }
-
     // MARK: About
 
     private var aboutTab: some View {
@@ -159,15 +112,53 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
             Divider().padding(.vertical, 4)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Released under the MIT License.")
-                Text("City data from GeoNames (geonames.org), licensed CC-BY 4.0.")
-                Text("Earth imagery: NASA Earth Observatory (Blue Marble, Black Marble).")
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button(updates.availableVersion.map { "Update to \($0)…" } ?? "Check for Updates…") {
+                        updates.checkForUpdates()
+                    }
+                    .disabled(!updates.canPresentUpdate)
+                    if let date = updates.lastCheckedAt {
+                        Text("Checked \(date, format: .relative(presentation: .named))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Toggle("Check for updates automatically", isOn: $updates.automaticallyChecksForUpdates)
+                    .disabled(!updates.isConfigured)
+                Toggle("Notify me when an update is available", isOn: Binding(
+                    get: { updates.notificationsEnabled },
+                    set: { enabled in Task { await updates.setNotificationsEnabled(enabled) } }
+                ))
+                .disabled(!updates.isConfigured || updates.requestingNotificationPermission)
+                if let message = updates.statusMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .font(.callout)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
+    }
+}
+
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case general = "General"
+    case time = "Time"
+    case appearance = "Appearance"
+    case about = "About"
+
+    var id: Self { self }
+
+    var systemImage: String {
+        switch self {
+        case .general: "gearshape"
+        case .time: "clock"
+        case .appearance: "sparkles"
+        case .about: "info.circle"
+        }
     }
 }
 

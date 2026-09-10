@@ -14,6 +14,25 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 
     override func sendEvent(_ event: NSEvent) {
+        // Menu-bar apps have no Edit menu to route standard text shortcuts.
+        if event.type == .keyDown, let editor = firstResponder as? NSText,
+           event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "a":
+                editor.selectAll(nil)
+                return
+            case "c":
+                editor.copy(nil)
+                return
+            case "x":
+                editor.cut(nil)
+                return
+            case "v":
+                editor.paste(nil)
+                return
+            default: break
+            }
+        }
         if event.type == .keyDown, !(firstResponder is NSText), onKeyEvent?(event) == true {
             return
         }

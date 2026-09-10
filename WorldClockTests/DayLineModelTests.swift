@@ -35,7 +35,7 @@ struct DayLineModelTests {
 
     @Test("An ordinary day has night, twilight, day, twilight, night segments at USNO boundaries")
     func ordinaryDaySegments() {
-        let dayLine = DayLineModel.dayLine(for: tbilisi, at: instant("2026-08-31T11:00:00+04:00"))
+        let dayLine = MeridianModel.lane(for: tbilisi, homeZone: tbilisi.timeZone, at: instant("2026-08-31T11:00:00+04:00"))
 
         #expect(dayLine.segments.map(\.kind) == [.night, .twilight, .day, .twilight, .night])
         #expect(dayLine.segments.first?.start == 0)
@@ -50,13 +50,13 @@ struct DayLineModelTests {
     @Test("The indicator sits at the Local Time: a sun by day, a phase-correct moon by night")
     func indicatorFollowsLocalTime() {
         // 15:00 local = 900/1440 of the day; the sun is up (06:25–19:36).
-        let afternoon = DayLineModel.dayLine(for: tbilisi, at: instant("2026-08-31T15:00:00+04:00"))
+        let afternoon = MeridianModel.lane(for: tbilisi, homeZone: tbilisi.timeZone, at: instant("2026-08-31T15:00:00+04:00"))
         expectClose(afternoon.indicatorPosition, 900.0 / 1440, tolerance: 0.0005)
         #expect(afternoon.indicator == .sun)
 
         // 23:00 local = 1380/1440; night. USNO: full moon 2026-08-28 → four
         // days later the phase is just past full (~0.5–0.65).
-        let night = DayLineModel.dayLine(for: tbilisi, at: instant("2026-08-31T23:00:00+04:00"))
+        let night = MeridianModel.lane(for: tbilisi, homeZone: tbilisi.timeZone, at: instant("2026-08-31T23:00:00+04:00"))
         expectClose(night.indicatorPosition, 1380.0 / 1440, tolerance: 0.0005)
         guard case let .moon(phase) = night.indicator else {
             Issue.record("expected a moon at night, got \(night.indicator)")
@@ -67,11 +67,11 @@ struct DayLineModelTests {
 
     @Test("Polar day is one bright segment with a sun; polar night one dark segment with a moon")
     func polarCases() {
-        let midsummer = DayLineModel.dayLine(for: longyearbyen, at: instant("2026-06-21T12:00:00+02:00"))
+        let midsummer = MeridianModel.lane(for: longyearbyen, homeZone: longyearbyen.timeZone, at: instant("2026-06-21T12:00:00+02:00"))
         #expect(midsummer.segments == [DayLine.Segment(kind: .day, start: 0, end: 1)])
         #expect(midsummer.indicator == .sun)
 
-        let midwinter = DayLineModel.dayLine(for: longyearbyen, at: instant("2026-12-21T12:00:00+01:00"))
+        let midwinter = MeridianModel.lane(for: longyearbyen, homeZone: longyearbyen.timeZone, at: instant("2026-12-21T12:00:00+01:00"))
         #expect(midwinter.segments == [DayLine.Segment(kind: .night, start: 0, end: 1)])
         guard case .moon = midwinter.indicator else {
             Issue.record("expected a moon in polar night, got \(midwinter.indicator)")
@@ -82,7 +82,7 @@ struct DayLineModelTests {
     @Test("A Location without coordinates still renders a plausible Day Line")
     func missingCoordinatesDegrade() {
         let timeZoneOnly = Location(cityName: "Somewhere", timeZone: TimeZone(identifier: "Asia/Tbilisi")!)
-        let dayLine = DayLineModel.dayLine(for: timeZoneOnly, at: instant("2026-08-31T15:00:00+04:00"))
+        let dayLine = MeridianModel.lane(for: timeZoneOnly, homeZone: timeZoneOnly.timeZone, at: instant("2026-08-31T15:00:00+04:00"))
 
         // Equatorial approximation: a day exists and surrounds local midday.
         #expect(dayLine.segments.map(\.kind) == [.night, .twilight, .day, .twilight, .night])

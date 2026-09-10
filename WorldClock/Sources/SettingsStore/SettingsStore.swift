@@ -5,36 +5,16 @@ import SwiftUI
 
 /// How Location offsets are interpreted: relative to Home (the default) or
 /// as UTC offsets.
-enum OffsetMode: String, Codable {
+enum OffsetMode: String {
     case relative
     case utc
 }
 
 /// The 12/24h preference: follow the system, or override.
-enum ClockFormatPreference: String, Codable {
+enum ClockFormatPreference: String {
     case system
     case twelveHour
     case twentyFourHour
-}
-
-enum FirstDayOfWeek: String, Codable {
-    case system
-    case monday
-    case sunday
-}
-
-/// Every preference, as one Codable value — the settings half of the
-/// export/import configuration file.
-struct SettingsSnapshot: Codable, Equatable {
-    var offsetMode: OffsetMode
-    var clockFormatPreference: ClockFormatPreference
-    var showWeather: Bool
-    var showGreetings: Bool
-    var showMoonPhase: Bool
-    var animationsEnabled: Bool
-    var firstDayOfWeek: FirstDayOfWeek
-    var autoUpdateHome: Bool
-    var menuBarLocationID: String?
 }
 
 /// User preferences, persisted in UserDefaults (PRD platform decision).
@@ -48,7 +28,6 @@ final class SettingsStore {
         static let showGreetings = "showGreetings"
         static let showMoonPhase = "showMoonPhase"
         static let animationsEnabled = "animationsEnabled"
-        static let firstDayOfWeek = "firstDayOfWeek"
         static let autoUpdateHome = "autoUpdateHome"
         static let menuBarLocationID = "menuBarLocationID"
     }
@@ -81,10 +60,6 @@ final class SettingsStore {
         didSet { defaults.set(animationsEnabled, forKey: Keys.animationsEnabled) }
     }
 
-    var firstDayOfWeek: FirstDayOfWeek {
-        didSet { defaults.set(firstDayOfWeek.rawValue, forKey: Keys.firstDayOfWeek) }
-    }
-
     var autoUpdateHome: Bool {
         didSet { defaults.set(autoUpdateHome, forKey: Keys.autoUpdateHome) }
     }
@@ -106,32 +81,6 @@ final class SettingsStore {
     /// replaced by simple fades.
     var prefersCrossfade: Bool {
         !animationsEnabled || reduceMotion()
-    }
-
-    var snapshot: SettingsSnapshot {
-        SettingsSnapshot(
-            offsetMode: offsetMode,
-            clockFormatPreference: clockFormatPreference,
-            showWeather: showWeather,
-            showGreetings: showGreetings,
-            showMoonPhase: showMoonPhase,
-            animationsEnabled: animationsEnabled,
-            firstDayOfWeek: firstDayOfWeek,
-            autoUpdateHome: autoUpdateHome,
-            menuBarLocationID: menuBarLocationID
-        )
-    }
-
-    func restore(_ snapshot: SettingsSnapshot) {
-        offsetMode = snapshot.offsetMode
-        clockFormatPreference = snapshot.clockFormatPreference
-        showWeather = snapshot.showWeather
-        showGreetings = snapshot.showGreetings
-        showMoonPhase = snapshot.showMoonPhase
-        animationsEnabled = snapshot.animationsEnabled
-        firstDayOfWeek = snapshot.firstDayOfWeek
-        autoUpdateHome = snapshot.autoUpdateHome
-        menuBarLocationID = snapshot.menuBarLocationID
     }
 
     /// Whether temperatures render in Celsius, from the injected locale.
@@ -165,8 +114,6 @@ final class SettingsStore {
         showGreetings = defaults.object(forKey: Keys.showGreetings) as? Bool ?? true
         showMoonPhase = defaults.object(forKey: Keys.showMoonPhase) as? Bool ?? true
         animationsEnabled = defaults.object(forKey: Keys.animationsEnabled) as? Bool ?? true
-        firstDayOfWeek = defaults.string(forKey: Keys.firstDayOfWeek)
-            .flatMap(FirstDayOfWeek.init(rawValue:)) ?? .system
         autoUpdateHome = defaults.object(forKey: Keys.autoUpdateHome) as? Bool ?? false
         menuBarLocationID = defaults.string(forKey: Keys.menuBarLocationID)
     }

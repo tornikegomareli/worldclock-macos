@@ -4,7 +4,7 @@ import Testing
 @testable import WorldClock
 
 /// Weather is tested through a fake WeatherProvider (ADR-0003): display
-/// mapping, cache TTL against the injected clock, and failure → absence.
+/// mapping, cache TTL against the injected clock, and failure/recovery states.
 @Suite("WeatherStore")
 struct WeatherStoreTests {
     let tbilisi = Location(
@@ -82,7 +82,7 @@ struct WeatherStoreTests {
         #expect(provider.fetchCount == 2)
     }
 
-    @Test("Failures are silent: no weather, no error surface")
+    @Test("Failures expose an unavailable state without fabricated weather")
     @MainActor
     func failureMeansAbsence() async {
         struct Unavailable: Error {}
@@ -96,6 +96,51 @@ struct WeatherStoreTests {
         await store.refresh([tbilisi])
 
         #expect(store.weather(for: tbilisi) == nil)
+        #expect(store.isUnavailable(for: tbilisi))
+    }
+
+    @Test("A failed request retries after a short delay and clears the error on success")
+    @MainActor
+    func recoveryAfterFailure() async {
+        let provider = FakeProvider(result: .failure(URLError(.notConnectedToInternet)))
+        let now = LockIsolated(instant("2026-09-01T12:00:00Z"))
+        let store = withDependencies { $0.date = DateGenerator { now.value } } operation: {
+            WeatherStore(provider: provider)
+        }
+        await store.refresh([tbilisi])
+        await store.refresh([tbilisi])
+        #expect(provider.fetchCount == 1)
+        provider.result = .success(Weather(condition: .clear, temperatureCelsius: 20))
+        let retryDate = now.value.addingTimeInterval(WeatherStore.retryDelay)
+        now.setValue(retryDate)
+        await store.refresh([tbilisi])
+        #expect(provider.fetchCount == 2)
+        #expect(!store.isUnavailable(for: tbilisi))
+        #expect(store.weather(for: tbilisi)?.temperatureCelsius == 20)
+    }
+
+    @Test("Expired weather is hidden and a failed refresh marks it unavailable")
+    @MainActor
+    func staleWeatherIsNotCurrent() async {
+        let provider = FakeProvider(result: .success(Weather(condition: .clear, temperatureCelsius: 20)))
+        let now = LockIsolated(instant("2026-09-01T12:00:00Z"))
+        let store = withDependencies { $0.date = DateGenerator { now.value } } operation: {
+            WeatherStore(provider: provider)
+        }
+        await store.refresh([tbilisi])
+        let expiryDate = now.value.addingTimeInterval(WeatherStore.timeToLive)
+        now.setValue(expiryDate)
+        #expect(store.weather(for: tbilisi) == nil)
+        provider.result = .failure(URLError(.notConnectedToInternet))
+        await store.refresh([tbilisi])
+        #expect(store.weather(for: tbilisi) == nil)
+        #expect(store.isUnavailable(for: tbilisi))
+    }
+
+    @Test("Clear weather uses the moon at night")
+    func nightSymbol() {
+        #expect(Weather(condition: .clear, temperatureCelsius: 20, isDaylight: false).symbolName == "moon")
+        #expect(Weather(condition: .clear, temperatureCelsius: 20).symbolName == "sun.max")
     }
 
     @Test("A Location without coordinates gets no weather and no fetch")

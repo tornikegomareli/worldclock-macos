@@ -21,11 +21,9 @@ final class LocationsStore {
     }
 
     @ObservationIgnored private let fileURL: URL
-    @ObservationIgnored private let systemTimeZone: TimeZone
 
     init(storageDirectory: URL) {
         @Dependency(\.timeZone) var systemTimeZone
-        self.systemTimeZone = systemTimeZone
         fileURL = storageDirectory.appendingPathComponent("locations.json")
         if let data = try? Data(contentsOf: fileURL),
            let stored = try? JSONDecoder().decode([Location].self, from: data) {
@@ -68,17 +66,6 @@ final class LocationsStore {
         )
         guard home != newHome else { return }
         locations = [newHome] + locations.dropFirst().filter { $0.id != newHome.id }
-    }
-
-    /// Import: replaces the whole list (and persists it).
-    func replaceAll(with imported: [Location]) {
-        guard !imported.isEmpty else { return }
-        locations = imported
-    }
-
-    /// Reset: back to the first-launch seed for the system timezone.
-    func resetToSeed() {
-        locations = Self.seed(homeTimeZone: systemTimeZone)
     }
 
     /// Fills in coordinates and country for Locations that lack them (e.g.

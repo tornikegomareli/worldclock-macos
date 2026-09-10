@@ -39,14 +39,16 @@ struct MeridianModelTests {
 
     @Test func homeLaneMatchesItsOwnDayLine() {
         let lane = MeridianModel.lane(for: london, homeZone: homeZone, at: instant)
-        let dayLine = DayLineModel.dayLine(for: london, at: instant)
-        #expect(lane.segments.count == dayLine.segments.count)
-        for (laneSegment, daySegment) in zip(lane.segments, dayLine.segments) {
-            #expect(laneSegment.kind == daySegment.kind)
-            #expect(abs(laneSegment.start - daySegment.start) < 1e-6)
-            #expect(abs(laneSegment.end - daySegment.end) < 1e-6)
+        guard case let .risesAndSets(dawn, sunrise, sunset, dusk) = DayLineModel.sunDay(for: london, at: instant) else {
+            Issue.record("Expected an ordinary winter day in London")
+            return
         }
-        #expect(lane.indicator == dayLine.indicator)
+        let boundaries = [dawn, sunrise, sunset, dusk].map {
+            $0.timeIntervalSince(homeWindow.start) / homeWindow.seconds
+        }
+        #expect(lane.segments.map(\.kind) == [.night, .twilight, .day, .twilight, .night])
+        #expect(lane.segments.dropLast().map(\.end) == boundaries)
+        #expect(lane.indicator == .sun)
     }
 
     @Test func lanesCoverTheFullDayContiguously() {

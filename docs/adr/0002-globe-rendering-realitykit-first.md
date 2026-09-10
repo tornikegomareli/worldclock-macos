@@ -17,7 +17,7 @@ The spike (`prototype/globe-spike`, never merged) rendered the full target on ma
 Findings that bind #15's implementation:
 
 - **Camera controls are ours.** `.realityViewCameraControls(.orbit)` has fixed drag sensitivity, no scroll-wheel zoom on macOS, and fights an explicitly added camera. Use a manual `PerspectiveCamera` on spherical coordinates (drag = yaw/pitch, scroll/pinch = dolly).
-- **Coordinate frame.** `generateSphere`'s texture mapping puts east longitudes on **+Z** (Greenwich at +X, Y up): sun vector and picking use `z = +sin(longitude)`, not the research doc's `−sin`.
+- **Coordinate frame (corrected September 2026).** Visual Jump testing exposed a mismatch between the generated sphere's UVs and the city coordinates. The shader now derives equirectangular UVs directly from model position, with Greenwich at +X, north at +Y, and east toward −Z. Markers, picking, the camera, and the sun use that same frame. This replaces the spike's incorrect reliance on generated UVs and +Z east longitudes.
 - **Surface shader API.** `view_direction()` points fragment → camera; `world_normal` is not exposed (the unrotated sphere's model normal stands in); the uniform slot is `custom.value` (SIMD4), not `custom.vector`; the generated sphere's V coordinate is flipped.
 - **Texture loading.** `TextureResource.load(named:)` requires an asset catalog once PNGs are involved; load by bundle URL with an explicit semantic — `.color` for sRGB imagery, `.raw` for masks — or the day side renders gamma-crushed.
 - **Night texture.** Black Marble's moonlit ice reads as a bright blob; subtract the diffuse base before boosting so only city lights survive.

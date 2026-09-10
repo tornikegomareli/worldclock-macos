@@ -1,0 +1,5 @@
+Apple Weather marks supplied by WeatherService.shared.attribution on 2026-09-06.
+Light: https://weatherkit.apple.com/assets/branding/en/Apple_Weather_blk_en_3X_090122.png
+Dark: https://weatherkit.apple.com/assets/branding/en/Apple_Weather_wht_en_3X_090122.png
+Data sources: https://weatherkit.apple.com/legal-attribution.html
+These Apple trademarks are not covered by WorldClock's MIT license.

@@ -16,6 +16,7 @@ struct FocusedTextField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
         field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none

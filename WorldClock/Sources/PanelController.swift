@@ -66,7 +66,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: true
         )
-        globeScene = GlobeSceneController(engine: engine, store: store)
+        globeScene = GlobeSceneController(engine: engine, store: store, state: globeState)
         var onCommand: (PanelCommand) -> Void = { _ in }
         hosting = NSHostingController(
             rootView: PanelContentView(
@@ -92,6 +92,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         registerKeys()
         trackContentSize()
         engine.startTicking()
+        globeScene.prewarm()
         databaseLoader.load { [weak self] database in
             guard let self else { return }
             // Give timezone-only Locations (like the seeded Home) real
@@ -164,9 +165,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             globeState.inspection = nil
             globeScene.removeScrollZoomMonitor()
         }
-        withAnimation(settings.animation(.easeInOut(duration: 0.35))) {
-            state.isGlobePresented = presented
-        }
+        state.isGlobePresented = presented
     }
 
     private func performEscapeStep() {
@@ -261,6 +260,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                         country: city.country
                     )
                 )
+                state.selectedLocationID = city.timeZone
             }
         }
     }
@@ -271,7 +271,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.dismissOverlays()
         switch command {
         case let .addLocation(city):
-            addAnimated(city)
+            if let existing = store.locations.first(where: { $0.id == city.timeZone }) {
+                state.selectedLocationID = existing.id
+            } else {
+                addAnimated(city)
+            }
         case let .showLocation(location):
             state.selectedLocationID = location.id
         case let .removeLocation(location):
@@ -303,6 +307,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Resizes whenever anything that changes the content's height mutates:
     /// the Location list, inspection, the overlays, or the Globe expanding.
     private func trackContentSize() {
+        let wasGlobePresented = state.isGlobePresented
         withObservationTracking { [weak self] in
             guard let self else { return }
             _ = store.locations.count
@@ -310,10 +315,14 @@ final class PanelController: NSObject, NSWindowDelegate {
             _ = state.isSearching
             _ = state.isCommandSearching
             _ = state.isGlobePresented
+            _ = settings.showWeather
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.resizeToFit(animated: true)
+                self.resizeToFit(
+                    animated: true,
+                    duration: wasGlobePresented == self.state.isGlobePresented ? 0.3 : 0.22
+                )
                 self.trackContentSize()
             }
         }
@@ -334,20 +343,20 @@ final class PanelController: NSObject, NSWindowDelegate {
         )
     }
 
-    private func resizeToFit(animated: Bool) {
+    private func resizeToFit(animated: Bool, duration: TimeInterval = 0.3) {
         guard panel.isVisible else { return }
         // Let SwiftUI process the state change before measuring.
         Task { @MainActor in
             await Task.yield()
-            self.applyFittingFrame(animated: animated)
+            self.applyFittingFrame(animated: animated, duration: duration)
         }
     }
 
-    private func applyFittingFrame(animated: Bool) {
+    private func applyFittingFrame(animated: Bool, duration: TimeInterval) {
         guard let frame = fittingFrame(), frame != panel.frame else { return }
         if animated, settings.animationsEnabled, !settings.prefersCrossfade {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.3
+                context.duration = duration
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 self.panel.animator().setFrame(frame, display: true)
             }

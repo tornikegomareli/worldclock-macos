@@ -29,7 +29,7 @@ struct PanelContentView: View {
         static let columnSpacing: CGFloat = 8
         static let collapsedWidth: CGFloat = 380
         static let globeWidth: CGFloat = 440
-        static let globeAreaHeight: CGFloat = 470
+        static let globeAreaHeight: CGFloat = 600
         static let overlayHeight: CGFloat = 460
     }
 
@@ -63,20 +63,33 @@ struct PanelContentView: View {
                 commandOverlay
                     .frame(height: Metrics.overlayHeight)
             } else {
-                identityHeader
                 if state.isGlobePresented {
+                    globeHeader
                     GlobeView(
                         controller: globeScene, engine: engine, store: store,
                         settings: settings, databaseLoader: databaseLoader,
                         state: globeState, theme: theme,
-                        onAddCity: { onCommand(.addLocation($0)) }
+                        onAddCity: { onCommand(.addLocation($0)) },
+                        onClose: { onCommand(.openGlobe) }
                     )
                     .frame(height: Metrics.globeAreaHeight)
                     .transition(.opacity)
                 } else {
+                    identityHeader
                     axisRow
-                    lanesArea
+                    locationsList
                     addLocationFooter
+                    if settings.showWeather {
+                        Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
+                            Image("AppleWeather")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 18)
+                        }
+                        .foregroundStyle(theme.secondaryText)
+                        .accessibilityLabel("Current weather from Apple Weather. View data sources.")
+                        .padding(.bottom, 10)
+                    }
                 }
             }
         }
@@ -91,10 +104,33 @@ struct PanelContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 0.5))
         .animation(settings.animation(.easeInOut(duration: 0.35)), value: isTimeTravel)
-        .animation(settings.animation(.easeInOut(duration: 0.35)), value: state.isGlobePresented)
+        .animation(settings.animation(.easeInOut(duration: 0.22)), value: state.isGlobePresented)
     }
 
     // MARK: Identity header
+
+    private var globeHeader: some View {
+        HStack {
+            Label("World view", systemImage: "globe")
+                .font(.system(size: 14, weight: .semibold))
+            Spacer()
+            if isTimeTravel {
+                Button("Return to Now") { onCommand(.returnToNow) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+            } else {
+                Text("\(store.home?.cityName ?? "Home") · \(TimeFormatting.timeString(LocalTime(of: engine.globalInstant, in: homeZone), clockFormat: clockFormat))")
+                    .font(.system(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(theme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 18)
+        .padding(.bottom, 4)
+    }
 
     private var identityHeader: some View {
         let instant = engine.globalInstant
@@ -209,6 +245,7 @@ struct PanelContentView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(state.isGlobePresented ? "Back to locations" : "Explore the world")
         .help("Open the Globe (Space)")
     }
 
@@ -299,6 +336,29 @@ struct PanelContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var locationsList: some View {
+        if store.locations.count > 6 {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    lanesArea
+                }
+                .frame(height: 300)
+                .onAppear {
+                    if let selected = state.selectedLocationID { proxy.scrollTo(selected) }
+                }
+                .onChange(of: state.selectedLocationID) {
+                    if let selected = state.selectedLocationID { proxy.scrollTo(selected) }
+                }
+                .onChange(of: state.inspectedLocationID) {
+                    if let inspected = state.inspectedLocationID { proxy.scrollTo(inspected) }
+                }
+            }
+        } else {
+            lanesArea
+        }
+    }
+
     private func locationRow(for location: Location) -> some View {
         let instant = engine.globalInstant
         let localTime = LocalTime(of: instant, in: location.timeZone)
@@ -320,6 +380,7 @@ struct PanelContentView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .tracking(-0.13)
                         .lineLimit(1)
+                        .help(location.cityName)
                     Button {
                         revealBothOffsets(for: location.id)
                     } label: {
@@ -331,6 +392,7 @@ struct PanelContentView: View {
                             .animation(settings.animation(.easeInOut(duration: 0.2)), value: caption)
                     }
                     .buttonStyle(.plain)
+                    .help(caption)
                 }
                 .frame(width: Metrics.nameWidth, alignment: .leading)
                 MeridianLaneView(
@@ -363,6 +425,23 @@ struct PanelContentView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             state.selectedLocationID = isSelected ? nil : location.id
+            if state.inspectedLocationID != state.selectedLocationID {
+                state.inspectedLocationID = nil
+            }
+        }
+        .contextMenu {
+            Button("Show on Globe") {
+                globeState.inspection = GlobeInspection(location: location)
+                onCommand(.openGlobe)
+            }
+            .disabled(location.latitude == nil || location.longitude == nil)
+            Button("Show Details") {
+                state.selectedLocationID = location.id
+                state.inspectedLocationID = location.id
+            }
+            Divider()
+            Button("Remove Location", role: .destructive) { onCommand(.removeLocation(location)) }
+                .disabled(store.locations.count <= 1)
         }
         .onHover { hovering in
             if hovering {
@@ -377,21 +456,33 @@ struct PanelContentView: View {
     /// otherwise the AM/PM suffix — plus the weather when enabled.
     @ViewBuilder
     private func secondaryTrailing(for location: Location, dateLabel: String?, suffix: String?) -> some View {
-        HStack(spacing: 4) {
-            if settings.showWeather, let weather = weatherStore.weather(for: location) {
-                HStack(spacing: 2) {
-                    Image(systemName: weather.condition.symbolName)
-                    Text(weather.temperatureText(usesMetric: settings.usesMetricUnits))
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 4) {
+                if let dateLabel {
+                    Text(dateLabel)
+                        .foregroundStyle(theme.accent)
+                        .fontWeight(.semibold)
+                }
+                if let suffix {
+                    Text(suffix)
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+            if settings.showWeather, location.latitude != nil, location.longitude != nil {
+                Group {
+                    if let weather = weatherStore.weather(for: location) {
+                        Label(weather.temperatureText(usesMetric: settings.usesMetricUnits), systemImage: weather.symbolName)
+                            .help("Current weather, independent of the timeline")
+                    } else if weatherStore.isUnavailable(for: location) {
+                        Label("—", systemImage: "cloud.slash")
+                            .accessibilityLabel("Weather unavailable")
+                            .help("Weather unavailable. Check your connection and reopen the panel to retry.")
+                    } else {
+                        Text("…")
+                            .accessibilityLabel("Loading weather")
+                    }
                 }
                 .foregroundStyle(theme.secondaryText)
-            }
-            if let dateLabel {
-                Text(dateLabel)
-                    .foregroundStyle(theme.accent)
-                    .fontWeight(.semibold)
-            } else if let suffix {
-                Text(suffix)
-                    .foregroundStyle(theme.secondaryText)
             }
         }
         .font(.system(size: 10.5))
@@ -476,7 +567,7 @@ struct PanelContentView: View {
                countryCode: country,
                at: LocalTime(of: instant, in: location.timeZone)
            ) {
-            return "\(greeting.text) · \(greeting.gloss)"
+            return greeting.text == greeting.gloss ? greeting.text : "\(greeting.text) · \(greeting.gloss)"
         }
         if isHome {
             return "Home · \(utcText)"
@@ -513,6 +604,16 @@ struct PanelContentView: View {
             .buttonStyle(.plain)
             Spacer()
             keyChip("A")
+            Button { onCommand(.openSettings) } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+            .help("Settings")
         }
         .padding(EdgeInsets(top: 8, leading: 14, bottom: 10, trailing: 14))
         .overlay(alignment: .top) {
@@ -561,22 +662,24 @@ struct PanelContentView: View {
             isEmpty: results.isEmpty
         ) {
             ForEach(Array(results.enumerated()), id: \.element) { index, command in
-                HStack {
-                    Text(command.title)
-                        .font(.body)
-                        .background(HiddenListScrollers())
-                    Spacer()
-                    if let shortcut = command.shortcutLabel {
-                        Text(shortcut)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(theme.tertiaryText)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(theme.pill, in: RoundedRectangle(cornerRadius: 4))
+                Button { onCommand(command) } label: {
+                    HStack {
+                        Text(command.title)
+                            .font(.body)
+                            .background(HiddenListScrollers())
+                        Spacer()
+                        if let shortcut = command.shortcutLabel {
+                            Text(shortcut)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(theme.tertiaryText)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(theme.pill, in: RoundedRectangle(cornerRadius: 4))
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { onCommand(command) }
+                .buttonStyle(.plain)
                 .listRowBackground(
                     index == highlighted
                         ? RoundedRectangle(cornerRadius: 6).fill(theme.selection)
@@ -599,15 +702,28 @@ struct PanelContentView: View {
         @ViewBuilder rows: () -> Rows
     ) -> some View {
         VStack(spacing: 0) {
-            FocusedTextField(
-                placeholder: placeholder,
-                text: query,
-                onSubmit: onSubmit,
-                onCancel: { state.dismissOverlays() },
-                onMoveUp: onMoveUp,
-                onMoveDown: onMoveDown
-            )
-            .padding(12)
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(theme.secondaryText)
+                FocusedTextField(
+                    placeholder: placeholder,
+                    text: query,
+                    onSubmit: onSubmit,
+                    onCancel: { state.dismissOverlays() },
+                    onMoveUp: onMoveUp,
+                    onMoveDown: onMoveDown
+                )
+                Button { state.dismissOverlays() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(theme.pill, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close search")
+                .help("Close search (Esc)")
+            }
+            .padding(14)
             Rectangle().fill(theme.separator).frame(height: 1)
             List {
                 rows()
@@ -618,9 +734,19 @@ struct PanelContentView: View {
             .overlay {
                 if isEmpty {
                     Text(emptyText)
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(theme.secondaryText)
+                        .padding(20)
                 }
             }
+            HStack {
+                Text("↑ ↓ to choose · ↵ to select")
+                Spacer()
+                Text("esc to close")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(theme.secondaryText)
+            .padding(12)
         }
     }
 
@@ -631,22 +757,42 @@ struct PanelContentView: View {
         return database.search(state.searchQuery, at: engine.globalInstant, limit: 8)
     }
 
+    @State private var searchSelection = 0
+
     private var searchOverlay: some View {
-        overlayShell(
-            placeholder: "City, airport code, or UTC offset",
-            query: $state.searchQuery,
-            onSubmit: {
-                if let first = searchResults.first { onCommand(.addLocation(first)) }
-            },
-            emptyText: "Loading cities…",
-            isEmpty: databaseLoader.database == nil
-        ) {
-            ForEach(searchResults) { city in
-                cityRow(for: city)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onCommand(.addLocation(city)) }
+        let results = searchResults
+        let selected = min(searchSelection, max(results.count - 1, 0))
+        let emptyText = databaseLoader.database == nil ? "Loading cities…"
+            : state.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Find a place to add\nSearch by city, country, or UTC offset."
+                : "No cities found\nTry another city name, country, or UTC offset."
+        return ScrollViewReader { proxy in
+            overlayShell(
+                placeholder: "City, country, or UTC offset",
+                query: $state.searchQuery,
+                onSubmit: {
+                    if results.indices.contains(selected) { onCommand(.addLocation(results[selected])) }
+                },
+                onMoveUp: { searchSelection = PanelKeyLogic.movedResultSelection(from: selected, by: -1, count: results.count) },
+                onMoveDown: { searchSelection = PanelKeyLogic.movedResultSelection(from: selected, by: 1, count: results.count) },
+                emptyText: emptyText,
+                isEmpty: results.isEmpty
+            ) {
+                ForEach(Array(results.enumerated()), id: \.element.id) { index, city in
+                    Button { onCommand(.addLocation(city)) } label: {
+                        cityRow(for: city).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .id(city.id)
+                    .listRowBackground(index == selected ? RoundedRectangle(cornerRadius: 6).fill(theme.selection) : nil)
+                    .accessibilityAddTraits(index == selected ? [.isSelected] : [])
+                }
+            }
+            .onChange(of: searchSelection) {
+                if results.indices.contains(searchSelection) { proxy.scrollTo(results[searchSelection].id) }
             }
         }
+        .onChange(of: state.searchQuery) { searchSelection = 0 }
     }
 
     private func cityRow(for city: City) -> some View {
@@ -668,7 +814,7 @@ struct PanelContentView: View {
                     Text(TimeFormatting.timeString(time, clockFormat: clockFormat))
                         .font(.body.monospacedDigit())
                 }
-                Text(city.timeZone)
+                Text(store.locations.contains(where: { $0.id == city.timeZone }) ? "Already saved" : city.timeZone)
                     .font(.caption2)
                     .foregroundStyle(theme.tertiaryText)
             }

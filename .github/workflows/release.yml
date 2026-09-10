@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, for example 0.1.0'
+        required: true
+        type: string
+      build_number:
+        description: 'Integer greater than every previously published build'
+        required: true
+        type: string
+      publish:
+        description: 'Publish the verified release on GitHub (off = artifacts only)'
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worldclock-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      NOTARY_PROFILE: worldclock-release
+      SPARKLE_ACCOUNT: WorldClock
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Validate release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          test -f "releases/$VERSION.md"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" --jq 'add' > "$RUNNER_TEMP/releases.json"
+          node Scripts/validate-release.mjs "$VERSION" "$BUILD_NUMBER" "$RUNNER_TEMP/releases.json"
+      - name: Resolve dependencies and Sparkle tools
+        run: |
+          tuist install
+          tuist generate --no-open
+          xcodebuild -resolvePackageDependencies -workspace WorldClock.xcworkspace \
+            -scheme WorldClock -derivedDataPath "$RUNNER_TEMP/WorldClockDependencies"
+      - name: Install signing credentials in temporary Keychain
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.RELEASE_KEYCHAIN_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          WEATHERKIT_PROFILE_BASE64: ${{ secrets.WEATHERKIT_PROFILE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CERTIFICATE_BASE64:?}" "${CERTIFICATE_PASSWORD:?}" "${KEYCHAIN_PASSWORD:?}"
+          : "${SPARKLE_PRIVATE_KEY:?}" "${APPLE_ID:?}" "${APPLE_APP_PASSWORD:?}"
+          : "${WEATHERKIT_PROFILE_BASE64:?}"
+          umask 077
+          mkdir -p .private
+          printf '%s' "$WEATHERKIT_PROFILE_BASE64" | base64 --decode > .private/WorldClock-WeatherKit.provisionprofile
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/worldclock-certificate.p12"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/worldclock-sparkle.key"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/worldclock-release.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/worldclock-release.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/worldclock-release.keychain-db"
+          security import "$RUNNER_TEMP/worldclock-certificate.p12" -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$RUNNER_TEMP/worldclock-release.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/worldclock-release.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/worldclock-release.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s "$RUNNER_TEMP/worldclock-release.keychain-db"
+          "$RUNNER_TEMP/WorldClockDependencies/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys" \
+            --account WorldClock -f "$RUNNER_TEMP/worldclock-sparkle.key"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" --apple-id "$APPLE_ID" \
+            --team-id 539293JFA3 --password "$APPLE_APP_PASSWORD"
+      - name: Test, sign, notarize, and package
+        run: bash Scripts/release.sh "$VERSION" "$BUILD_NUMBER"
+      - name: Upload verified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClock-${{ inputs.version }}
+          path: release-output/${{ inputs.version }}-${{ inputs.build_number }}/assets/
+          if-no-files-found: error
+      - name: Publish release
+        if: inputs.publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="release-output/$VERSION-$BUILD_NUMBER/assets"
+          (cd "$output" && shasum -a 256 -c SHA256SUMS)
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft \
+            --title "WorldClock $VERSION" --notes-file "releases/$VERSION.md" \
+            "$output/WorldClock.dmg" "$output/WorldClock-$VERSION.zip" \
+            "$output/appcast.xml" "$output/worldclock.rb" "$output/SHA256SUMS"
+          gh release edit "v$VERSION" --draft=false --latest
+      - name: Update Homebrew cask after publication
+        if: inputs.publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Normal fast-forward only. Branch protection may require a maintainer to apply the artifact.
+          git pull --ff-only origin main
+          cp "release-output/$VERSION-$BUILD_NUMBER/assets/worldclock.rb" Casks/worldclock.rb
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/worldclock.rb
+          git commit -m "Update WorldClock cask to $VERSION"
+          git push origin HEAD:main
+      - name: Remove temporary signing Keychain
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/worldclock-release.keychain-db"; then
+            security delete-keychain "$RUNNER_TEMP/worldclock-release.keychain-db"
+          fi

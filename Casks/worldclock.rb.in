@@ -1,0 +1,22 @@
+cask "worldclock" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
+
+  url "https://github.com/tornikegomareli/worldclock-macos/releases/download/v#{version}/WorldClock.dmg"
+  name "WorldClock"
+  desc "World clocks and a living globe in your menu bar"
+  homepage "https://github.com/tornikegomareli/worldclock-macos"
+
+  auto_updates true
+  depends_on macos: :sequoia
+
+  app "WorldClock.app"
+
+  uninstall quit: "com.tornikegomareli.WorldClock"
+
+  zap trash: [
+    "~/Library/Application Support/WorldClock",
+    "~/Library/Caches/com.tornikegomareli.WorldClock",
+    "~/Library/Preferences/com.tornikegomareli.WorldClock.plist",
+  ]
+end

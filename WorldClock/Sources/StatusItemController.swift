@@ -15,6 +15,7 @@ extension KeyboardShortcuts.Name {
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let settings = SettingsStore()
+    private let updates = UpdateService()
     private let panelController: PanelController
     private var homeLocationUpdater: HomeLocationUpdater?
     private var settingsWindow: NSWindow?
@@ -39,6 +40,7 @@ final class StatusItemController: NSObject {
             self?.togglePanel()
         }
         updateMenuBarTitle()
+        updates.start()
     }
 
     /// Renders the optional menu-bar time (a chosen Location's Local Time of
@@ -48,13 +50,19 @@ final class StatusItemController: NSObject {
         withObservationTracking { [weak self] in
             guard let self, let button = statusItem.button else { return }
             let engine = panelController.engine
-            let title: String
+            var title: String
             if let id = settings.menuBarLocationID,
                let location = panelController.store.locations.first(where: { $0.id == id }) {
                 let localTime = LocalTime(of: engine.globalInstant, in: location.timeZone)
                 title = " " + TimeFormatting.timeString(localTime, clockFormat: settings.resolvedClockFormat)
             } else {
                 title = ""
+            }
+            if let version = updates.availableVersion {
+                title += " •"
+                button.toolTip = "WorldClock \(version) is available. Right-click to update."
+            } else {
+                button.toolTip = "WorldClock"
             }
             if button.title != title {
                 statusItem.length = title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
@@ -90,6 +98,14 @@ final class StatusItemController: NSObject {
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
+        let updateItem = NSMenuItem(
+            title: updates.availableVersion.map { "Update to \($0)…" } ?? "Check for Updates…",
+            action: #selector(checkForUpdates), keyEquivalent: ""
+        )
+        updateItem.target = self
+        updateItem.isEnabled = updates.canPresentUpdate
+        menu.autoenablesItems = false
+        menu.addItem(updateItem)
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(title: "Quit WorldClock", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -111,13 +127,17 @@ final class StatusItemController: NSObject {
             window.title = "WorldClock Settings"
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(
-                rootView: SettingsView(settings: settings, store: panelController.store)
+                rootView: SettingsView(settings: settings, store: panelController.store, updates: updates)
             )
             settingsWindow = window
         }
         settingsWindow?.center()
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
+    }
+
+    @objc private func checkForUpdates() {
+        updates.checkForUpdates()
     }
 
     /// Template image of an Earth glyph rotated to the planet's axial tilt (23.4°).
