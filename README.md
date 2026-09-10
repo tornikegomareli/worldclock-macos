@@ -63,8 +63,8 @@ Source builds work without an Apple Developer account. Weather needs a WeatherKi
 
 ## Privacy
 
-No accounts or analytics. Your cities and preferences stay on your Mac.
-Clocks, city search, and the globe work offline. Optional weather connects to Apple; release update checks connect to GitHub.
+No accounts or analytics
+Clocks, city search, and the globe work offline. Optional weather connects to Apple.
 
 Read the [privacy details](PRIVACY.md).
 
