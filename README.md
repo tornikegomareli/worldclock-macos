@@ -2,8 +2,6 @@
 
 <h3 align="center">Time zones at a glance.</h3>
 
-## Showcase
-
 <p align="center">
   <a href="docs/media/worldclock-demo.mp4">
     <img src="docs/media/worldclock-demo.gif" width="90%" alt="WorldClock demo: comparing city times and exploring the globe" />
