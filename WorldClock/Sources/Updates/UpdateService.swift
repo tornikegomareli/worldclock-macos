@@ -33,7 +33,7 @@ final class UpdateService {
     func start(bundle: Bundle = .main) {
         guard controller == nil else { return }
         guard Self.hasValidConfiguration(bundle.infoDictionary ?? [:]) else {
-            statusMessage = "Updates are available in signed release builds."
+            statusMessage = "This build is not configured for updates. Use the signed release in Applications to check for updates."
             return
         }
         delegate.service = self

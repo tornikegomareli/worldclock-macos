@@ -32,3 +32,8 @@ node_modules/
 
 # Retired prototype; the active landing page is a separate project.
 /website/
+
+# Local reference documents (public credits remain in README and app resources).
+/PRIVACY.md
+/SECURITY.md
+/THIRD_PARTY_NOTICES.md

@@ -66,11 +66,11 @@ Source builds work without an Apple Developer account. Weather needs a WeatherKi
 No accounts or analytics
 Clocks, city search, and the globe work offline. Optional weather connects to Apple.
 
-Read the [privacy details](PRIVACY.md).
-
 ## License
 
 WorldClock is free and open source under the [MIT License](LICENSE).
 
-City data is from GeoNames (CC BY 4.0). Earth imagery is from NASA and GEBCO. Weather is provided by Apple Weather.
-See [credits and third-party licenses](THIRD_PARTY_NOTICES.md) for sources and notices.
+City data is derived from [GeoNames](https://www.geonames.org/) cities15000 and timezone data, under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Earth imagery comes from NASA Blue Marble, Black Marble, and Jesse Allen’s GEBCO terrain imagery. See the [bundled imagery credits](WorldClock/Resources/EarthImageryCredits.txt).
+Weather comes from Apple Weather. See [weather data sources](https://weatherkit.apple.com/legal-attribution.html) and [mark credits](WorldClock/Resources/WeatherAssetsCredits.txt).
+Sparkle, KeyboardShortcuts, and Point-Free dependencies retain their MIT licenses and bundled notices. These credits do not imply endorsement.

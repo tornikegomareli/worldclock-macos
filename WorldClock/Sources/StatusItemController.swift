@@ -104,6 +104,7 @@ final class StatusItemController: NSObject {
         )
         updateItem.target = self
         updateItem.isEnabled = updates.canPresentUpdate
+        updateItem.toolTip = updates.statusMessage
         menu.autoenablesItems = false
         menu.addItem(updateItem)
         menu.addItem(.separator())

@@ -46,6 +46,7 @@ struct SettingsView: View {
         case .general: generalTab
         case .time: timeTab
         case .appearance: appearanceTab
+        case .updates: UpdatesSettingsView(updates: updates)
         case .about: aboutTab
         }
     }
@@ -111,6 +112,19 @@ struct SettingsView: View {
             Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
                 .foregroundStyle(.secondary)
                 .font(.callout)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+    }
+}
+
+private struct UpdatesSettingsView: View {
+    @Bindable var updates: UpdateService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Installed version: \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
+                .foregroundStyle(.secondary)
             Divider().padding(.vertical, 4)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -118,6 +132,7 @@ struct SettingsView: View {
                         updates.checkForUpdates()
                     }
                     .disabled(!updates.canPresentUpdate)
+                    .help(updates.statusMessage ?? "Check for a newer version of WorldClock.")
                     if let date = updates.lastCheckedAt {
                         Text("Checked \(date, format: .relative(presentation: .named))")
                             .font(.caption)
@@ -137,6 +152,9 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if !updates.isConfigured {
+                    Link("Download the release build", destination: URL(string: "https://getworldclock.app/#release")!)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -148,6 +166,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case general = "General"
     case time = "Time"
     case appearance = "Appearance"
+    case updates = "Updates"
     case about = "About"
 
     var id: Self { self }
@@ -157,6 +176,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .time: "clock"
         case .appearance: "sparkles"
+        case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
         }
     }

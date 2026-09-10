@@ -43,7 +43,7 @@ struct UpdateServiceTests {
         #expect(!service.canPresentUpdate)
         #expect(!service.automaticallyChecksForUpdates)
         #expect(!service.notificationsEnabled)
-        #expect(service.statusMessage == "Updates are available in signed release builds.")
+        #expect(service.statusMessage == "This build is not configured for updates. Use the signed release in Applications to check for updates.")
     }
 }
 
