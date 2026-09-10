@@ -1,6 +1,15 @@
 # Release preparation
 
-## September 9, 2026: current launch status
+## September 10, 2026: first public release
+
+- The maintainer authorized publication. `tornikegomareli/worldclock-macos` is public, with a description, topics, an MIT license, and README demo media.
+- Published `v0.1.0`, build 37, from commit `ca61653e5a5236de23ce71afa450499f3c5fe451`. The clean-source publisher built, signed, notarized, uploaded, downloaded, and verified all release artifacts before publication.
+- All 131 native tests and 11 release-script tests passed. GitHub CI for the release source passed. Publication files and Git history passed redacted secret scans.
+- The public Sparkle feed matches the signed local feed and passed signature verification. A real older-to-newer update installation remains unverified.
+- Published the generated Homebrew cask with the verified DMG checksum. The README's tap and install commands successfully installed `/Applications/WorldClock.app` on the maintainer's Mac.
+- The active landing page remains a separate local project. No public website deployment was made.
+
+## September 9, 2026: pre-launch checks
 
 - Transferred the repository to `tornikegomareli/worldclock-macos`. GitHub confirms it remains private. No tags or releases were created.
 - Updated the Git remote, app feed, release scripts, cask template, contribution instructions, and separate landing page links to the new owner.

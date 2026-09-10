@@ -21,6 +21,18 @@
   <img src="docs/images/world-view.png" width="45%" alt="WorldClock’s globe focused on Tbilisi" />
 </p>
 
+## Install
+
+With Homebrew:
+
+```sh
+brew tap tornikegomareli/worldclock https://github.com/tornikegomareli/worldclock-macos
+brew install --cask tornikegomareli/worldclock/worldclock
+```
+
+Or download [WorldClock.dmg](https://github.com/tornikegomareli/worldclock-macos/releases/latest/download/WorldClock.dmg).
+The app is signed and notarized for macOS 15+, on Apple Silicon and Intel.
+
 ## Using it
 
 - Press **⌥ Space** to open your clocks.
