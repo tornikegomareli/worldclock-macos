@@ -45,7 +45,9 @@ fi
 
 release_tmp="$(mktemp -d "${TMPDIR:-/tmp}/worldclock-publish.XXXXXX")"
 trap 'rm -r "$release_tmp"' EXIT
-gh api --paginate --slurp "repos/$repo/releases" --jq add > "$release_tmp/releases.json"
+gh api --paginate --slurp "repos/$repo/releases" \
+  | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.stringify(JSON.parse(input).flat())));' \
+  > "$release_tmp/releases.json"
 build_number="$(GH_TOKEN="${GH_TOKEN:-$(gh auth token)}" node Scripts/validate-release.mjs \
   "$version" auto "$release_tmp/releases.json" "$(git rev-list --count HEAD)")"
 previous_tag="$(node -e 'const r=require(process.argv[1]); console.log(r.find(x=>!x.draft&&!x.prerelease)?.tag_name ?? "")' "$release_tmp/releases.json")"
@@ -73,7 +75,9 @@ if $dry_run; then
 fi
 
 # A failed upload leaves a draft for inspection; never overwrite existing assets.
-gh api --paginate --slurp "repos/$repo/releases" --jq add > "$release_tmp/releases.json"
+gh api --paginate --slurp "repos/$repo/releases" \
+  | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.stringify(JSON.parse(input).flat())));' \
+  > "$release_tmp/releases.json"
 GH_TOKEN="${GH_TOKEN:-$(gh auth token)}" node Scripts/validate-release.mjs "$version" "$build_number" "$release_tmp/releases.json"
 gh release create "$tag" --repo "$repo" --target "$commit" --draft \
   --title "WorldClock $version" --notes-file "releases/$version.md"

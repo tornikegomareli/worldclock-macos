@@ -34,11 +34,12 @@ function release(args = ["0.2.0"], options = {}) {
       fs.appendFileSync('calls.jsonl',JSON.stringify(a)+'\\n');
       if(a[0]==='auth') { if(a[1]==='token') console.log('test-token'); }
       else if(a[0]==='api') {
+        if(a.includes('--slurp') && a.includes('--jq')) process.exit(96);
         const endpoint=a.find(x=>x.startsWith('repos/'));
         if(endpoint.endsWith('/git/ref/heads/main')) console.log(process.env.REMOTE_COMMIT || 'source-commit');
         else if(endpoint.includes('/git/matching-refs/')) console.log(process.env.REMOTE_TAG || '0');
         else if(endpoint.endsWith('/Config/Sparkle-public-key.txt')) console.log(process.env.PREVIOUS_KEY || 'public-key');
-        else if(endpoint.endsWith('/releases')) console.log(process.env.RELEASES || '[]');
+        else if(endpoint.endsWith('/releases')) console.log(JSON.stringify([JSON.parse(process.env.RELEASES || '[]')]));
         else if(endpoint==='repos/tornikegomareli/worldclock-macos') console.log(process.env.PRIVATE || 'false');
         else process.exit(98);
       } else if(a[0]==='release') {
