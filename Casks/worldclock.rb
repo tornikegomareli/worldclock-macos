@@ -1,6 +1,6 @@
 cask "worldclock" do
-  version "0.1.0"
-  sha256 "7bda6864ee298ed7137cd2a02995e176a5e5e061dbed69f55a31cad46a5bd427"
+  version "0.1.1"
+  sha256 "ab5578184444ab6d7c5d67e2e69488890f394a8e7ee4e28c0b1ea91fb1f9af86"
 
   url "https://github.com/tornikegomareli/worldclock-macos/releases/download/v#{version}/WorldClock.dmg"
   name "WorldClock"
