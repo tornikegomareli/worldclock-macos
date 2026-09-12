@@ -4,10 +4,8 @@
 
 <p align="center">
   <a href="[docs/media/worldclock-demo.mp4](https://getworldclock.app/#top)">
-    
 
-https://github.com/user-attachments/assets/513ebe21-b60d-44fa-ac0f-4135f612e2d5
-
+  https://github.com/user-attachments/assets/71003941-2b32-4610-8d06-9820e497c19d
 
   </a>
 </p>
